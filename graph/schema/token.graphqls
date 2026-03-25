@@ -1,0 +1,28 @@
+extend type Query {
+  token(id: ID!): Token
+  tokens: [Token!]!
+}
+
+extend type Mutation {
+  createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+  updateToken(id: ID!, defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+  toggleCors(id: ID!): Boolean!
+  deleteToken(id: ID!): Boolean!
+  claimToken(id: ID!): Token!
+}
+
+type Token {
+  id: ID!
+  agentId: String
+  url: String!
+  ip: String!
+  userAgent: String!
+  createdAt: String!
+  requestCount: Int!
+  defaultStatus: Int!
+  defaultContent: String!
+  defaultContentType: String!
+  timeout: Int!
+  cors: Boolean!
+  requests: [Request!]! @goField(forceResolver: true)
+}

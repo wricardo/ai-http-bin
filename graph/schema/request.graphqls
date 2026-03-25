@@ -1,0 +1,45 @@
+extend type Query {
+  request(id: ID!): Request
+  requests(tokenId: ID!, page: Int, perPage: Int, sorting: String): RequestPage!
+}
+
+extend type Mutation {
+  deleteRequest(id: ID!): Boolean!
+  clearRequests(tokenId: ID!): Boolean!
+}
+
+extend type Subscription {
+  requestReceived(tokenId: ID!): RequestEvent!
+}
+
+type Request {
+  id: ID!
+  tokenId: ID!
+  method: String!
+  url: String!
+  hostname: String!
+  path: String!
+  headers: String!
+  query: String!
+  body: String!
+  formData: String!
+  ip: String!
+  userAgent: String!
+  createdAt: String!
+}
+
+type RequestPage {
+  data: [Request!]!
+  total: Int!
+  perPage: Int!
+  currentPage: Int!
+  isLastPage: Boolean!
+  from: Int!
+  to: Int!
+}
+
+type RequestEvent {
+  request: Request!
+  total: Int!
+  truncated: Boolean!
+}
