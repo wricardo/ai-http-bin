@@ -2,8 +2,8 @@
 .env
 
 # Build output
-server
-ai-http-bin
+/server
+/ai-http-bin
 
 # Tool artifacts
 repomix-output.xml

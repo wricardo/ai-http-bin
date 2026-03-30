@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI HTTP Bin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #070a0b;
+    --surface:   #0c1113;
+    --surface2:  #101618;
+    --surface3:  #141c1f;
+    --border:    #182024;
+    --border2:   #1f2a2e;
+    --text:      #b8c8cc;
+    --text-dim:  #4a5e63;
+    --text-muted:#2a3b3f;
+    --green:     #2dc88a;
+    --green-dim: #1a5c40;
+    --amber:     #e8a020;
+    --amber-dim: #5a3e0a;
+    --red:       #e05858;
+    --red-dim:   #4a1a1a;
+    --blue:      #4a9ae0;
+    --blue-dim:  #143050;
+    --purple:    #9878e8;
+    --cyan:      #30b8c8;
+    --sel:       #0f2830;
+    --sel-border:#1a5a6a;
+    --header-h:  48px;
+    --footer-h:  44px;
+    --token-w:   220px;
+    --detail-w:  380px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  /* ── LAYOUT ─────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-rows: var(--header-h) 1fr var(--footer-h);
+    height: 100vh;
+  }
+
+  /* ── HEADER ─────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    user-select: none;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text);
+  }
+
+  .logo-icon {
+    width: 22px;
+    height: 22px;
+    background: var(--green-dim);
+    border: 1px solid var(--green);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--green);
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(45, 200, 138, 0.4); }
+    50%       { opacity: 0.7; box-shadow: 0 0 0 4px rgba(45, 200, 138, 0); }
+  }
+
+  /* ── MAIN ────────────────────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: var(--token-w) 1fr var(--detail-w);
+    overflow: hidden;
+  }
+
+  /* ── PANEL BASE ──────────────────────────────────────── */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+  }
+
+  .panel:last-child { border-right: none; }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    height: 34px;
+    min-height: 34px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    user-select: none;
+  }
+
+  .panel-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-track { background: transparent; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── TOKEN LIST ──────────────────────────────────────── */
+  .token-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .token-item:hover { background: var(--surface2); }
+
+  .token-item.active {
+    background: var(--sel);
+    border-left: 2px solid var(--sel-border);
+    padding-left: 10px;
+  }
+
+  .token-id {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.03em;
+  }
+
+  .token-item.active .token-id { color: var(--cyan); }
+
+  .token-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .tag {
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .tag-agent { background: var(--blue-dim); color: var(--blue); }
+  .tag-script { background: var(--purple); color: #fff; opacity: 0.8; }
+  .tag-anon { background: var(--surface3); color: var(--text-dim); }
+
+  .req-count {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* ── REQUEST FEED ────────────────────────────────────── */
+  .req-row {
+    display: grid;
+    grid-template-columns: 54px 46px 1fr 34px;
+    align-items: center;
+    gap: 0;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .req-row:hover { background: var(--surface2); }
+
+  .req-row.active {
+    background: var(--sel);
+    border-left: 2px solid var(--sel-border);
+    padding-left: 10px;
+  }
+
+  .req-row.new-flash {
+    animation: flash 0.6s ease;
+  }
+
+  @keyframes flash {
+    0%  { background: rgba(45, 200, 138, 0.12); }
+    100%{ background: transparent; }
+  }
+
+  .req-time {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .method-badge {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 1px 4px;
+    border-radius: 2px;
+    text-align: center;
+  }
+
+  .method-GET    { color: var(--blue);   background: var(--blue-dim); }
+  .method-POST   { color: var(--green);  background: var(--green-dim); }
+  .method-PUT    { color: var(--amber);  background: var(--amber-dim); }
+  .method-PATCH  { color: var(--amber);  background: var(--amber-dim); }
+  .method-DELETE { color: var(--red);    background: var(--red-dim); }
+
+  .req-path {
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .status-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .status-2xx { color: var(--green); }
+  .status-4xx { color: var(--amber); }
+  .status-5xx { color: var(--red); }
+
+  /* ── DETAIL PANEL ────────────────────────────────────── */
+  .detail-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 11px;
+    gap: 8px;
+    user-select: none;
+  }
+
+  .detail-empty-icon {
+    font-size: 28px;
+    opacity: 0.3;
+  }
+
+  .detail-section {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-section-head {
+    padding: 6px 14px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+  }
+
+  .detail-section-head:hover { color: var(--text); }
+
+  .detail-section-body {
+    padding: 10px 14px;
+  }
+
+  .detail-hero {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .detail-method-path {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .detail-method {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .detail-path {
+    font-size: 13px;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  .detail-meta-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .detail-status {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* key-value table */
+  .kv-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .kv-table tr { border-bottom: 1px solid var(--border); }
+  .kv-table tr:last-child { border-bottom: none; }
+
+  .kv-table td {
+    padding: 4px 0;
+    vertical-align: top;
+  }
+
+  .kv-key {
+    color: var(--text-dim);
+    padding-right: 12px;
+    white-space: nowrap;
+    font-size: 10px;
+    min-width: 120px;
+    max-width: 140px;
+    word-break: break-all;
+  }
+
+  .kv-val {
+    color: var(--text);
+    word-break: break-all;
+    font-size: 10px;
+  }
+
+  .code-block {
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 10px;
+    font-size: 10.5px;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow: auto;
+    max-height: 220px;
+    line-height: 1.7;
+  }
+
+  .code-block::-webkit-scrollbar { width: 4px; height: 4px; }
+  .code-block::-webkit-scrollbar-track { background: transparent; }
+  .code-block::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  /* syntax colors */
+  .jk { color: var(--cyan); }
+  .jv-str { color: var(--green); }
+  .jv-num { color: var(--amber); }
+  .jv-bool { color: var(--purple); }
+  .jv-null { color: var(--text-dim); }
+
+  /* ── FOOTER ──────────────────────────────────────────── */
+  footer {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 6px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    overflow-x: auto;
+    overflow-y: hidden;
+    user-select: none;
+    font-size: 10px;
+  }
+
+  footer::-webkit-scrollbar { display: none; }
+
+  .footer-label {
+    color: var(--text-dim);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding-right: 4px;
+    border-right: 1px solid var(--border2);
+    margin-right: 4px;
+  }
+
+  .var-chip {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 2px 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .var-key {
+    padding: 0 6px;
+    color: var(--text-dim);
+    border-right: 1px solid var(--border2);
+    font-size: 10px;
+  }
+
+  .var-val {
+    padding: 0 7px;
+    color: var(--green);
+    font-size: 10px;
+  }
+
+  .empty-vars {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  /* ── MISC ────────────────────────────────────────────── */
+  .badge-live {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--green);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .badge-live-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease infinite;
+  }
+
+  .token-count-chip {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border2);
+  }
+
+  .detail-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⬡</div>
+      AI HTTP BIN
+    </div>
+    <div class="header-meta">
+      <span id="token-summary">3 tokens · 22 requests</span>
+      <div class="divider"></div>
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        CONNECTED
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- TOKENS -->
+    <div class="panel" id="token-panel">
+      <div class="panel-header">
+        Tokens
+        <span class="token-count-chip" id="token-count">3</span>
+      </div>
+      <div class="panel-body" id="token-list"></div>
+    </div>
+
+    <!-- REQUEST FEED -->
+    <div class="panel" id="feed-panel">
+      <div class="panel-header">
+        <span id="feed-title">Select a token</span>
+        <div class="panel-header-right">
+          <div class="badge-live" id="live-indicator" style="display:none">
+            <div class="badge-live-dot"></div>
+            LIVE
+          </div>
+        </div>
+      </div>
+      <div class="panel-body" id="request-feed">
+        <div class="detail-empty">
+          <div class="detail-empty-icon">◈</div>
+          <span>select a token to view requests</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DETAIL -->
+    <div class="panel detail-panel" id="detail-panel">
+      <div class="panel-header">
+        Request Detail
+      </div>
+      <div class="panel-body" id="detail-body">
+        <div class="detail-empty">
+          <div class="detail-empty-icon">◉</div>
+          <span>select a request to inspect</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER: global vars -->
+  <footer>
+    <span class="footer-label">Global Vars</span>
+    <div id="vars-strip"></div>
+  </footer>
+
+</div>
+
+<script>
+// ── FAKE DATA ──────────────────────────────────────────────────────
+var TOKENS = [
+  {
+    id: "a3f2b1c4-09d1-4e8a-bc32-f1e2d3c4b5a6",
+    short: "a3f2b1c4",
+    agent_id: "",
+    script: "",
+    created_at: "2026-03-30T12:20:00Z",
+    default_status: 200
+  },
+  {
+    id: "d8e9f012-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+    short: "d8e9f012",
+    agent_id: "gpt-agent-01",
+    script: "",
+    created_at: "2026-03-30T12:18:00Z",
+    default_status: 200
+  },
+  {
+    id: "b5c6d7e8-f9a0-1b2c-3d4e-5f6a7b8c9d0e",
+    short: "b5c6d7e8",
+    agent_id: "claude-worker",
+    script: "var n = parseInt(load('attempts')||'0')+1;\nstore('attempts',String(n));\nif(n<3){respond(500,JSON.stringify({error:'not ready',attempt:n}),'application/json');}else{respond(200,JSON.stringify({ok:true,attempt:n}),'application/json');}",
+    created_at: "2026-03-30T12:15:00Z",
+    default_status: 200
+  }
+];
+
+var REQUESTS = {
+  "a3f2b1c4-09d1-4e8a-bc32-f1e2d3c4b5a6": [
+    {
+      id: "req-001", method: "POST", path: "/webhook", status: 200, ts: "12:34:01",
+      headers: {"content-type":"application/json","user-agent":"curl/7.88.0","x-forwarded-for":"203.0.113.42"},
+      query: {},
+      body: '{"event":"order.created","order_id":"ORD-9921","amount":142.50,"currency":"USD"}'
+    },
+    {
+      id: "req-002", method: "GET", path: "/status", status: 200, ts: "12:33:58",
+      headers: {"user-agent":"python-requests/2.31.0","accept":"*/*"},
+      query: {env: "prod"},
+      body: ""
+    },
+    {
+      id: "req-003", method: "POST", path: "/webhook", status: 422, ts: "12:33:55",
+      headers: {"content-type":"application/json","user-agent":"axios/1.6.0"},
+      query: {},
+      body: '{"event":"payment.failed","reason":"insufficient_funds"}'
+    },
+    {
+      id: "req-004", method: "DELETE", path: "/item/3", status: 200, ts: "12:33:52",
+      headers: {"authorization":"Bearer sk-test-***","content-type":"application/json"},
+      query: {},
+      body: ""
+    },
+    {
+      id: "req-005", method: "POST", path: "/webhook", status: 500, ts: "12:33:49",
+      headers: {"content-type":"application/json"},
+      query: {},
+      body: '{"event":"order.created","order_id":"ORD-9920"}'
+    },
+    {
+      id: "req-006", method: "GET", path: "/health", status: 200, ts: "12:33:45",
+      headers: {"user-agent":"go-http-client/1.1"},
+      query: {},
+      body: ""
+    },
+    {
+      id: "req-007", method: "PUT", path: "/config/retry", status: 200, ts: "12:33:40",
+      headers: {"content-type":"application/json","x-agent-id":"gpt-agent-01"},
+      query: {},
+      body: '{"max_retries":5,"backoff_ms":1000}'
+    },
+    {
+      id: "req-008", method: "POST", path: "/notify", status: 200, ts: "12:33:35",
+      headers: {"content-type":"application/json"},
+      query: {channel: "email"},
+      body: '{"to":"ops@example.com","subject":"Deploy complete"}'
+    }
+  ],
+  "d8e9f012-3a4b-5c6d-7e8f-9a0b1c2d3e4f": [
+    {
+      id: "req-009", method: "POST", path: "/ingest", status: 201, ts: "12:33:58",
+      headers: {"content-type":"application/json","x-agent-id":"gpt-agent-01"},
+      query: {},
+      body: '{"items":[{"id":1,"title":"Buy milk"},{"id":2,"title":"Fix CI"}]}'
+    },
+    {
+      id: "req-010", method: "GET", path: "/ingest", status: 200, ts: "12:33:50",
+      headers: {"x-agent-id":"gpt-agent-01"},
+      query: {},
+      body: ""
+    },
+    {
+      id: "req-011", method: "DELETE", path: "/ingest/1", status: 200, ts: "12:33:45",
+      headers: {"x-agent-id":"gpt-agent-01"},
+      query: {},
+      body: ""
+    },
+    {
+      id: "req-012", method: "POST", path: "/ingest", status: 201, ts: "12:33:40",
+      headers: {"content-type":"application/json","x-agent-id":"gpt-agent-01"},
+      query: {},
+      body: '{"items":[{"id":3,"title":"Review PR"}]}'
+    },
+    {
+      id: "req-013", method: "GET", path: "/ingest", status: 200, ts: "12:33:38",
+      headers: {"x-agent-id":"gpt-agent-01"},
+      query: {},
+      body: ""
+    }
+  ],
+  "b5c6d7e8-f9a0-1b2c-3d4e-5f6a7b8c9d0e": [
+    {
+      id: "req-014", method: "POST", path: "/retry-test", status: 500, ts: "12:33:10",
+      headers: {"content-type":"application/json","x-agent-id":"claude-worker"},
+      query: {},
+      body: '{"attempt":1}'
+    },
+    {
+      id: "req-015", method: "POST", path: "/retry-test", status: 500, ts: "12:33:14",
+      headers: {"content-type":"application/json","x-agent-id":"claude-worker"},
+      query: {},
+      body: '{"attempt":2}'
+    },
+    {
+      id: "req-016", method: "POST", path: "/retry-test", status: 200, ts: "12:33:18",
+      headers: {"content-type":"application/json","x-agent-id":"claude-worker"},
+      query: {},
+      body: '{"attempt":3}'
+    }
+  ]
+};
+
+var GLOBAL_VARS = [
+  { key: "attempts", value: "3" },
+  { key: "todos", value: '[{"id":1,"title":"Buy milk","done":false},...]' },
+  { key: "last_event", value: "order.created" },
+  { key: "deploy_env", value: "staging" }
+];
+
+// ── STATE ──────────────────────────────────────────────────────────
+var selectedToken = null;
+var selectedRequest = null;
+
+// ── HELPERS ───────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+function methodClass(m) {
+  return "method-" + m;
+}
+
+function statusClass(s) {
+  if (s >= 500) return "status-5xx";
+  if (s >= 400) return "status-4xx";
+  return "status-2xx";
+}
+
+function methodColor(m) {
+  var map = {GET:"var(--blue)",POST:"var(--green)",PUT:"var(--amber)",PATCH:"var(--amber)",DELETE:"var(--red)"};
+  return map[m] || "var(--text)";
+}
+
+function prettyJson(str) {
+  try {
+    var obj = JSON.parse(str);
+    return syntaxHighlight(JSON.stringify(obj, null, 2));
+  } catch(e) {
+    return esc(str);
+  }
+}
+
+function syntaxHighlight(json) {
+  return json
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function(match) {
+      var cls = "jv-num";
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? "jk" : "jv-str";
+      } else if (/true|false/.test(match)) {
+        cls = "jv-bool";
+      } else if (/null/.test(match)) {
+        cls = "jv-null";
+      }
+      if (cls === "jk") {
+        return '<span class="jk">' + esc(match) + '</span>';
+      }
+      return '<span class="' + cls + '">' + esc(match) + '</span>';
+    })
+    .replace(/\n/g, "<br>")
+    .replace(/ {2}/g, "&nbsp;&nbsp;");
+}
+
+function reqCount(tokenId) {
+  var reqs = REQUESTS[tokenId];
+  return reqs ? reqs.length : 0;
+}
+
+// ── RENDER: TOKEN LIST ─────────────────────────────────────────────
+function renderTokenList() {
+  var list = document.getElementById("token-list");
+  list.innerHTML = "";
+  TOKENS.forEach(function(t) {
+    var div = document.createElement("div");
+    div.className = "token-item" + (selectedToken && selectedToken.id === t.id ? " active" : "");
+    div.setAttribute("data-id", t.id);
+
+    var tagHtml = "";
+    if (t.agent_id) {
+      tagHtml += '<span class="tag tag-agent">' + esc(t.agent_id) + '</span>';
+    } else {
+      tagHtml += '<span class="tag tag-anon">anon</span>';
+    }
+    if (t.script) {
+      tagHtml += ' <span class="tag tag-script">script</span>';
+    }
+
+    var count = reqCount(t.id);
+    div.innerHTML = '<div class="token-id">' + esc(t.short) + '</div>' +
+      '<div class="token-meta">' +
+        tagHtml +
+        '<span class="req-count" style="margin-left:auto">' + count + ' req' + (count !== 1 ? 's' : '') + '</span>' +
+      '</div>';
+
+    div.addEventListener("click", function() {
+      selectToken(t);
+    });
+    list.appendChild(div);
+  });
+}
+
+// ── RENDER: REQUEST FEED ───────────────────────────────────────────
+function renderFeed(token) {
+  var feed = document.getElementById("request-feed");
+  var title = document.getElementById("feed-title");
+  var live = document.getElementById("live-indicator");
+
+  title.textContent = token.short;
+  live.style.display = "flex";
+  feed.innerHTML = "";
+
+  var reqs = REQUESTS[token.id] || [];
+  if (reqs.length === 0) {
+    feed.innerHTML = '<div class="detail-empty"><div class="detail-empty-icon">◈</div><span>no requests yet</span></div>';
+    return;
+  }
+
+  reqs.forEach(function(r) {
+    feed.appendChild(buildReqRow(r));
+  });
+}
+
+function buildReqRow(r) {
+  var div = document.createElement("div");
+  div.className = "req-row" + (selectedRequest && selectedRequest.id === r.id ? " active" : "");
+  div.setAttribute("data-id", r.id);
+  div.innerHTML =
+    '<span class="req-time">' + esc(r.ts) + '</span>' +
+    '<span class="method-badge ' + methodClass(r.method) + '">' + esc(r.method) + '</span>' +
+    '<span class="req-path">' + esc(r.path) + '</span>' +
+    '<span class="status-badge ' + statusClass(r.status) + '">' + r.status + '</span>';
+  div.addEventListener("click", function() {
+    selectRequest(r);
+  });
+  return div;
+}
+
+// ── RENDER: DETAIL ────────────────────────────────────────────────
+function renderDetail(r) {
+  var body = document.getElementById("detail-body");
+  body.innerHTML = "";
+
+  // Hero
+  var hero = document.createElement("div");
+  hero.className = "detail-hero";
+  var methodColor_ = methodColor(r.method);
+  hero.innerHTML =
+    '<div class="detail-method-path">' +
+      '<span class="detail-method" style="color:' + methodColor_ + '">' + esc(r.method) + '</span>' +
+      '<span class="detail-path">' + esc(r.path) + '</span>' +
+    '</div>' +
+    '<div class="detail-meta-row">' +
+      '<span class="detail-status ' + statusClass(r.status) + '">' + r.status + '</span>' +
+      '<span>' + esc(r.ts) + '</span>' +
+    '</div>';
+  body.appendChild(hero);
+
+  // Headers
+  var headerKeys = Object.keys(r.headers);
+  if (headerKeys.length > 0) {
+    var sec = buildSection("Headers", buildKV(r.headers));
+    body.appendChild(sec);
+  }
+
+  // Query params
+  var qKeys = Object.keys(r.query);
+  if (qKeys.length > 0) {
+    body.appendChild(buildSection("Query", buildKV(r.query)));
+  }
+
+  // Body
+  if (r.body) {
+    body.appendChild(buildSection("Body", buildCodeBlock(prettyJson(r.body)), true));
+  } else {
+    body.appendChild(buildSection("Body", '<span style="color:var(--text-muted);font-size:10px;font-style:italic">empty</span>'));
+  }
+}
+
+function buildSection(title, contentHtml, codeMode) {
+  var sec = document.createElement("div");
+  sec.className = "detail-section";
+
+  var head = document.createElement("div");
+  head.className = "detail-section-head";
+  head.innerHTML = esc(title) + '<span style="font-size:9px;color:var(--text-muted)">▾</span>';
+
+  var bdy = document.createElement("div");
+  bdy.className = "detail-section-body";
+  bdy.innerHTML = contentHtml;
+
+  head.addEventListener("click", function() {
+    bdy.style.display = bdy.style.display === "none" ? "" : "none";
+  });
+
+  sec.appendChild(head);
+  sec.appendChild(bdy);
+  return sec;
+}
+
+function buildKV(obj) {
+  var rows = "";
+  Object.keys(obj).forEach(function(k) {
+    rows += '<tr><td class="kv-key">' + esc(k) + '</td><td class="kv-val">' + esc(obj[k]) + '</td></tr>';
+  });
+  return '<table class="kv-table"><tbody>' + rows + '</tbody></table>';
+}
+
+function buildCodeBlock(html) {
+  return '<div class="code-block">' + html + '</div>';
+}
+
+// ── RENDER: GLOBAL VARS ────────────────────────────────────────────
+function renderVars() {
+  var strip = document.getElementById("vars-strip");
+  strip.innerHTML = "";
+  if (GLOBAL_VARS.length === 0) {
+    strip.innerHTML = '<span class="empty-vars">no global vars</span>';
+    return;
+  }
+  GLOBAL_VARS.forEach(function(v) {
+    var chip = document.createElement("div");
+    chip.className = "var-chip";
+    chip.innerHTML =
+      '<span class="var-key">' + esc(v.key) + '</span>' +
+      '<span class="var-val">' + esc(v.value.length > 24 ? v.value.substring(0, 24) + "…" : v.value) + '</span>';
+    strip.appendChild(chip);
+  });
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────
+function selectToken(token) {
+  selectedToken = token;
+  selectedRequest = null;
+  renderTokenList();
+  renderFeed(token);
+  document.getElementById("detail-body").innerHTML =
+    '<div class="detail-empty"><div class="detail-empty-icon">◉</div><span>select a request to inspect</span></div>';
+}
+
+function selectRequest(req) {
+  selectedRequest = req;
+  // Re-render feed to update active row
+  var rows = document.querySelectorAll(".req-row");
+  rows.forEach(function(row) {
+    if (row.getAttribute("data-id") === req.id) {
+      row.classList.add("active");
+    } else {
+      row.classList.remove("active");
+    }
+  });
+  renderDetail(req);
+}
+
+// ── SSE SIMULATION ────────────────────────────────────────────────
+// Every 5s, simulate a new incoming request on the selected token
+var newReqTemplates = [
+  {method:"POST", path:"/webhook", status:200, body:'{"event":"ping","ts":' + Date.now() + '}',
+   headers:{"content-type":"application/json","user-agent":"simulator/1.0"}, query:{}},
+  {method:"GET",  path:"/status",  status:200, body:"",
+   headers:{"user-agent":"healthcheck/1.0"}, query:{}},
+  {method:"POST", path:"/webhook", status:201, body:'{"event":"order.created","order_id":"ORD-' + Math.floor(Math.random()*9000+1000) + '"}',
+   headers:{"content-type":"application/json"}, query:{}}
+];
+var simIdx = 0;
+
+function simulateIncoming() {
+  if (!selectedToken) return;
+  var tpl = newReqTemplates[simIdx % newReqTemplates.length];
+  simIdx++;
+
+  var now = new Date();
+  var ts = String(now.getHours()).padStart(2,"0") + ":" +
+            String(now.getMinutes()).padStart(2,"0") + ":" +
+            String(now.getSeconds()).padStart(2,"0");
+
+  var newReq = {
+    id: "sim-" + Date.now(),
+    method: tpl.method,
+    path: tpl.path,
+    status: tpl.status,
+    ts: ts,
+    headers: tpl.headers,
+    query: tpl.query,
+    body: tpl.body
+  };
+
+  REQUESTS[selectedToken.id].unshift(newReq);
+
+  var feed = document.getElementById("request-feed");
+  // Remove empty placeholder if present
+  var empty = feed.querySelector(".detail-empty");
+  if (empty) feed.innerHTML = "";
+
+  var row = buildReqRow(newReq);
+  row.classList.add("new-flash");
+  feed.insertBefore(row, feed.firstChild);
+
+  // Update req count in token list
+  renderTokenList();
+}
+
+setInterval(simulateIncoming, 5000);
+
+// ── INIT ──────────────────────────────────────────────────────────
+renderTokenList();
+renderVars();
+
+// Auto-select first token
+selectToken(TOKENS[0]);
+</script>
+</body>
+</html>

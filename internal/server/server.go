@@ -68,6 +68,7 @@ func New(baseURL string, opts ...Option) *http.Server {
 	api.register(r.Group("/api"))
 
 	webhook.NewHandler(s).Register(r)
+	registerUI(r)
 
 	return &http.Server{Handler: r}
 }
