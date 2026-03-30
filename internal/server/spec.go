@@ -6,6 +6,74 @@ func specMarkdown(baseURL string) string {
 	return strings.ReplaceAll(specTemplate, "{{BASE_URL}}", baseURL)
 }
 
+func llmsTxt(baseURL string) string {
+	return strings.ReplaceAll(llmsTxtTemplate, "{{BASE_URL}}", baseURL)
+}
+
+const llmsTxtTemplate = `# AI HTTP Bin
+
+> Webhook inspection and mock HTTP endpoint service for AI agents.
+> Create unique URLs, capture incoming requests, and inspect them via REST or GraphQL API.
+
+Base URL: {{BASE_URL}}
+
+## Key endpoints
+
+- [API spec]({{BASE_URL}}/): Full REST + GraphQL documentation (text/markdown)
+- [GraphQL playground]({{BASE_URL}}/playground): Interactive query interface
+- [Health check]({{BASE_URL}}/health): Returns {"status":"ok"}
+
+## How it works
+
+1. POST /api/tokens — create a unique webhook URL
+2. Send any HTTP request to {{BASE_URL}}/<token-id>
+3. GET /api/tokens/<token-id>/requests — inspect captured requests
+
+## REST API
+
+- POST   /api/tokens                        — create token (supports script field)
+- GET    /api/tokens                        — list tokens (scoped by X-Agent-Id if provided)
+- GET    /api/tokens/:id                    — get token
+- PUT    /api/tokens/:id                    — update token config
+- PUT    /api/tokens/:id/script             — set JS script on token (body: {"script":"..."})
+- DELETE /api/tokens/:id                    — delete token and its requests
+- GET    /api/tokens/:id/requests           — list captured requests
+- DELETE /api/tokens/:id/requests           — clear all requests
+- GET    /api/requests/:id                  — get single request
+- DELETE /api/requests/:id                  — delete single request
+- POST   /api/claim/:id                     — claim anonymous token (requires X-Agent-Id)
+- GET    /api/vars                          — list all global variables
+- PUT    /api/vars/:key                     — set a global variable (body: {"value":"..."})
+- DELETE /api/vars/:key                     — delete a global variable
+
+## GraphQL API
+
+Endpoint: POST {{BASE_URL}}/graphql
+Subscriptions (WebSocket): ws://{{BASE_URL}}/graphql
+
+Queries: token, tokens, request, requests, globalVars
+Mutations: createToken, updateToken, setScript, deleteToken, toggleCors, claimToken, deleteRequest, clearRequests, setGlobalVar, deleteGlobalVar
+Subscriptions: requestReceived(tokenId)
+
+## Authentication (agent identity, optional)
+
+Pass X-Agent-Id: <uuid> to scope tokens to your agent identity.
+Anonymous tokens can be claimed later via POST /api/claim/:id.
+
+## Webhook receiver
+
+ANY method to {{BASE_URL}}/<token-id> or {{BASE_URL}}/<token-id>/<path> is captured.
+First path segment after token can be a status code to override the response (e.g. /404).
+
+## Scripting
+
+Tokens can have a JS script that runs on every request and controls the response.
+Scripts have access to: request (method/path/body/query/headers/formData), respond(status, body, contentType),
+store(key, value), load(key), del(key), JSON.stringify, JSON.parse.
+Global vars persist across requests and are shared across all tokens.
+Script execution is limited to 2 seconds. Errors return 500 with X-Script-Error header.
+`
+
 const specTemplate = `# AI HTTP Bin — API for AI Agents
 
 A webhook inspection and mock HTTP endpoint service built for AI agents.
@@ -113,6 +181,7 @@ Body (all fields optional):
 | default_content_type | string | "text/plain" | Content-Type of webhook response |
 | timeout | int | 0 | Seconds to wait before responding (0-10) |
 | cors | bool | false | Add CORS headers to webhook responses |
+| script | string | "" | JS script to run on each request (overrides static response) |
 
 Returns: ` + "`201 Created`" + ` with token object.
 
@@ -143,6 +212,21 @@ Content-Type: application/json
 ` + "```" + `
 
 Body: same fields as Create Token (all optional, only provided fields are updated).
+
+Returns: ` + "`200 OK`" + ` with updated token object.
+
+#### Set Script
+
+` + "```" + `
+PUT /api/tokens/:id/script
+Content-Type: application/json
+` + "```" + `
+
+Body: ` + "`{\"script\": \"<js source>\"}`" + `
+
+Sets a JS script on the token. When set, the script runs on every incoming request
+and its ` + "`respond()`" + ` call determines the response. Overrides static ` + "`default_content`" + `.
+Pass an empty string to clear the script.
 
 Returns: ` + "`200 OK`" + ` with updated token object.
 
@@ -210,6 +294,17 @@ Fails if token is already claimed.
 
 Returns: ` + "`200 OK`" + ` with token object, or ` + "`409 Conflict`" + `.
 
+### Global Variables
+
+Global variables are persistent key-value pairs shared across all tokens. Scripts can
+read and write them via ` + "`store()`" + ` / ` + "`load()`" + ` to maintain state across requests.
+
+` + "```" + `
+GET    /api/vars          — list all global variables
+PUT    /api/vars/:key     — set a variable (body: {"value":"..."})
+DELETE /api/vars/:key     — delete a variable
+` + "```" + `
+
 ---
 
 ## Webhook Receiver
@@ -218,14 +313,55 @@ Any HTTP method to ` + "`/:token`" + ` or ` + "`/:token/*path`" + ` is captured 
 
 ### Response Behavior
 
+- **Script** (highest priority): If the token has a script set, it runs and its ` + "`respond()`" + ` call determines the response.
 - **Status**: Uses the token's ` + "`default_status`" + `. If the first path segment after
   the token is a valid HTTP status code (e.g. ` + "`/418`" + `), that overrides the default.
 - **Body**: Uses ` + "`default_content`" + `.
 - **Content-Type**: Uses ` + "`default_content_type`" + `.
 - **Headers**: ` + "`X-Request-Id`" + ` and ` + "`X-Token-Id`" + ` are always set.
 - **CORS**: If ` + "`cors`" + ` is enabled on the token, standard CORS headers are added.
-- **Timeout**: If set, the server waits N seconds before responding.
+- **Timeout**: If set, the server waits N seconds before responding (applies before script runs).
 - **Unknown token**: Returns ` + "`410 Gone`" + `.
+
+### Scripting API
+
+When a token has a ` + "`script`" + ` set, it runs as JavaScript (ES5+) on every request.
+
+**Available globals:**
+
+| Name | Signature | Description |
+|------|-----------|-------------|
+| ` + "`request`" + ` | object | Incoming request: ` + "`method`" + `, ` + "`path`" + `, ` + "`body`" + `, ` + "`query`" + `, ` + "`headers`" + `, ` + "`formData`" + ` |
+| ` + "`respond`" + ` | ` + "`(status, body, contentType?, headers?)`" + ` | Set the HTTP response |
+| ` + "`store`" + ` | ` + "`(key, value)`" + ` | Persist a global variable |
+| ` + "`load`" + ` | ` + "`(key) → string`" + ` | Read a global variable (` + `""` + ` if missing) |
+| ` + "`del`" + ` | ` + "`(key)`" + ` | Delete a global variable |
+| ` + "`JSON.stringify`" + ` | ` + "`(value) → string`" + ` | Serialize to JSON |
+| ` + "`JSON.parse`" + ` | ` + "`(string) → value`" + ` | Parse JSON |
+
+Scripts have a **2-second execution timeout**. Errors return ` + "`500`" + ` with an ` + "`X-Script-Error`" + ` header.
+
+**Example: stateful counter**
+
+` + "```" + `js
+var n = parseInt(load("hits") || "0") + 1;
+store("hits", String(n));
+respond(200, JSON.stringify({ hits: n }), "application/json");
+` + "```" + `
+
+**Example: method-based routing**
+
+` + "```" + `js
+var items = JSON.parse(load("items") || "[]");
+if (request.method === "GET") {
+  respond(200, JSON.stringify(items), "application/json");
+} else if (request.method === "POST") {
+  var body = JSON.parse(request.body || "{}");
+  items.push(body);
+  store("items", JSON.stringify(items));
+  respond(201, JSON.stringify(body), "application/json");
+}
+` + "```" + `
 
 ### Example: Mock a 201 JSON endpoint
 
@@ -289,18 +425,22 @@ token(id: ID!): Token
 tokens: [Token!]!
 request(id: ID!): Request
 requests(tokenId: ID!, page: Int, perPage: Int, sorting: String): RequestPage!
+globalVars: [GlobalVar!]!
 ` + "```" + `
 
 ### Mutations
 
 ` + "```" + `graphql
-createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean, script: String): Token!
 updateToken(id: ID!, defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+setScript(id: ID!, script: String!): Token!
 toggleCors(id: ID!): Boolean!
 deleteToken(id: ID!): Boolean!
 claimToken(id: ID!): Token!
 deleteRequest(id: ID!): Boolean!
 clearRequests(tokenId: ID!): Boolean!
+setGlobalVar(key: String!, value: String!): GlobalVar!
+deleteGlobalVar(key: String!): Boolean!
 ` + "```" + `
 
 ### Subscriptions (WebSocket)

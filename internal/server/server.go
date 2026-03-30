@@ -52,6 +52,9 @@ func New(baseURL string, opts ...Option) *http.Server {
 	r.GET("/", func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/markdown; charset=utf-8", []byte(specMarkdown(baseURL)))
 	})
+	r.GET("/llms.txt", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(llmsTxt(baseURL)))
+	})
 
 	r.POST("/graphql", gin.WrapH(gqlSrv))
 	r.GET("/graphql", gin.WrapH(gqlSrv))

@@ -14,7 +14,7 @@ import (
 )
 
 // CreateToken is the resolver for the createToken field.
-func (r *mutationResolver) CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) (*model.Token, error) {
+func (r *mutationResolver) CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string) (*model.Token, error) {
 	ip, ua := "", ""
 	if gc := GinContextFrom(ctx); gc != nil {
 		ip = gc.ClientIP()
@@ -23,7 +23,42 @@ func (r *mutationResolver) CreateToken(ctx context.Context, defaultStatus *int, 
 	agentID := AgentIDFromContext(ctx)
 	t := r.Store.CreateToken(ip, ua, agentID)
 	patchToken(t, defaultStatus, defaultContent, defaultContentType, timeout, cors)
+	if script != nil {
+		t.Script = *script
+	}
 	return storeTokenToModel(r.Store, r.BaseURL, t), nil
+}
+
+// SetScript is the resolver for the setScript field.
+func (r *mutationResolver) SetScript(ctx context.Context, id string, script string) (*model.Token, error) {
+	ok := r.Store.SetScript(id, script)
+	if !ok {
+		return nil, fmt.Errorf("token not found: %s", id)
+	}
+	t, _ := r.Store.GetToken(id)
+	return storeTokenToModel(r.Store, r.BaseURL, t), nil
+}
+
+// SetGlobalVar is the resolver for the setGlobalVar field.
+func (r *mutationResolver) SetGlobalVar(ctx context.Context, key string, value string) (*model.GlobalVar, error) {
+	r.Store.SetGlobalVar(key, value)
+	return &model.GlobalVar{Key: key, Value: value}, nil
+}
+
+// DeleteGlobalVar is the resolver for the deleteGlobalVar field.
+func (r *mutationResolver) DeleteGlobalVar(ctx context.Context, key string) (bool, error) {
+	r.Store.DeleteGlobalVar(key)
+	return true, nil
+}
+
+// GlobalVars is the resolver for the globalVars field.
+func (r *queryResolver) GlobalVars(ctx context.Context) ([]*model.GlobalVar, error) {
+	vars := r.Store.ListGlobalVars()
+	result := make([]*model.GlobalVar, 0, len(vars))
+	for k, v := range vars {
+		result = append(result, &model.GlobalVar{Key: k, Value: v})
+	}
+	return result, nil
 }
 
 // UpdateToken is the resolver for the updateToken field.

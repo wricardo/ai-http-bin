@@ -44,6 +44,7 @@ func storeTokenToModel(s *store.Store, baseURL string, t *store.Token) *model.To
 		DefaultContentType: t.DefaultContentType,
 		Timeout:            t.Timeout,
 		Cors:               t.Cors,
+		Script:             t.Script,
 	}
 }
 

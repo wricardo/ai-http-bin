@@ -38,21 +38,30 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	GlobalVar struct {
+		Key   func(childComplexity int) int
+		Value func(childComplexity int) int
+	}
+
 	Mutation struct {
-		ClaimToken    func(childComplexity int, id string) int
-		ClearRequests func(childComplexity int, tokenID string) int
-		CreateToken   func(childComplexity int, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) int
-		DeleteRequest func(childComplexity int, id string) int
-		DeleteToken   func(childComplexity int, id string) int
-		ToggleCors    func(childComplexity int, id string) int
-		UpdateToken   func(childComplexity int, id string, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) int
+		ClaimToken      func(childComplexity int, id string) int
+		ClearRequests   func(childComplexity int, tokenID string) int
+		CreateToken     func(childComplexity int, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string) int
+		DeleteGlobalVar func(childComplexity int, key string) int
+		DeleteRequest   func(childComplexity int, id string) int
+		DeleteToken     func(childComplexity int, id string) int
+		SetGlobalVar    func(childComplexity int, key string, value string) int
+		SetScript       func(childComplexity int, id string, script string) int
+		ToggleCors      func(childComplexity int, id string) int
+		UpdateToken     func(childComplexity int, id string, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) int
 	}
 
 	Query struct {
-		Request  func(childComplexity int, id string) int
-		Requests func(childComplexity int, tokenID string, page *int, perPage *int, sorting *string) int
-		Token    func(childComplexity int, id string) int
-		Tokens   func(childComplexity int) int
+		GlobalVars func(childComplexity int) int
+		Request    func(childComplexity int, id string) int
+		Requests   func(childComplexity int, tokenID string, page *int, perPage *int, sorting *string) int
+		Token      func(childComplexity int, id string) int
+		Tokens     func(childComplexity int) int
 	}
 
 	Request struct {
@@ -102,6 +111,7 @@ type ComplexityRoot struct {
 		IP                 func(childComplexity int) int
 		RequestCount       func(childComplexity int) int
 		Requests           func(childComplexity int) int
+		Script             func(childComplexity int) int
 		Timeout            func(childComplexity int) int
 		URL                func(childComplexity int) int
 		UserAgent          func(childComplexity int) int
@@ -111,17 +121,21 @@ type ComplexityRoot struct {
 type MutationResolver interface {
 	DeleteRequest(ctx context.Context, id string) (bool, error)
 	ClearRequests(ctx context.Context, tokenID string) (bool, error)
-	CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) (*model.Token, error)
+	CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string) (*model.Token, error)
 	UpdateToken(ctx context.Context, id string, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) (*model.Token, error)
+	SetScript(ctx context.Context, id string, script string) (*model.Token, error)
 	ToggleCors(ctx context.Context, id string) (bool, error)
 	DeleteToken(ctx context.Context, id string) (bool, error)
 	ClaimToken(ctx context.Context, id string) (*model.Token, error)
+	SetGlobalVar(ctx context.Context, key string, value string) (*model.GlobalVar, error)
+	DeleteGlobalVar(ctx context.Context, key string) (bool, error)
 }
 type QueryResolver interface {
 	Request(ctx context.Context, id string) (*model.Request, error)
 	Requests(ctx context.Context, tokenID string, page *int, perPage *int, sorting *string) (*model.RequestPage, error)
 	Token(ctx context.Context, id string) (*model.Token, error)
 	Tokens(ctx context.Context) ([]*model.Token, error)
+	GlobalVars(ctx context.Context) ([]*model.GlobalVar, error)
 }
 type SubscriptionResolver interface {
 	RequestReceived(ctx context.Context, tokenID string) (<-chan *model.RequestEvent, error)
@@ -143,6 +157,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := newExecutionContext(nil, e, nil)
 	_ = ec
 	switch typeName + "." + field {
+
+	case "GlobalVar.key":
+		if e.ComplexityRoot.GlobalVar.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GlobalVar.Key(childComplexity), true
+	case "GlobalVar.value":
+		if e.ComplexityRoot.GlobalVar.Value == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GlobalVar.Value(childComplexity), true
 
 	case "Mutation.claimToken":
 		if e.ComplexityRoot.Mutation.ClaimToken == nil {
@@ -176,7 +203,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateToken(childComplexity, args["defaultStatus"].(*int), args["defaultContent"].(*string), args["defaultContentType"].(*string), args["timeout"].(*int), args["cors"].(*bool)), true
+		return e.ComplexityRoot.Mutation.CreateToken(childComplexity, args["defaultStatus"].(*int), args["defaultContent"].(*string), args["defaultContentType"].(*string), args["timeout"].(*int), args["cors"].(*bool), args["script"].(*string)), true
+	case "Mutation.deleteGlobalVar":
+		if e.ComplexityRoot.Mutation.DeleteGlobalVar == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteGlobalVar_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteGlobalVar(childComplexity, args["key"].(string)), true
 	case "Mutation.deleteRequest":
 		if e.ComplexityRoot.Mutation.DeleteRequest == nil {
 			break
@@ -199,6 +237,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteToken(childComplexity, args["id"].(string)), true
+	case "Mutation.setGlobalVar":
+		if e.ComplexityRoot.Mutation.SetGlobalVar == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setGlobalVar_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetGlobalVar(childComplexity, args["key"].(string), args["value"].(string)), true
+	case "Mutation.setScript":
+		if e.ComplexityRoot.Mutation.SetScript == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setScript_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetScript(childComplexity, args["id"].(string), args["script"].(string)), true
 	case "Mutation.toggleCors":
 		if e.ComplexityRoot.Mutation.ToggleCors == nil {
 			break
@@ -221,6 +281,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateToken(childComplexity, args["id"].(string), args["defaultStatus"].(*int), args["defaultContent"].(*string), args["defaultContentType"].(*string), args["timeout"].(*int), args["cors"].(*bool)), true
+
+	case "Query.globalVars":
+		if e.ComplexityRoot.Query.GlobalVars == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.GlobalVars(childComplexity), true
 
 	case "Query.request":
 		if e.ComplexityRoot.Query.Request == nil {
@@ -475,6 +542,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Token.Requests(childComplexity), true
+	case "Token.script":
+		if e.ComplexityRoot.Token.Script == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Token.Script(childComplexity), true
 	case "Token.timeout":
 		if e.ComplexityRoot.Token.Timeout == nil {
 			break
@@ -664,6 +737,22 @@ func (ec *executionContext) field_Mutation_createToken_args(ctx context.Context,
 		return nil, err
 	}
 	args["cors"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "script", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["script"] = arg5
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteGlobalVar_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "key", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["key"] = arg0
 	return args, nil
 }
 
@@ -686,6 +775,38 @@ func (ec *executionContext) field_Mutation_deleteToken_args(ctx context.Context,
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setGlobalVar_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "key", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["key"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "value", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["value"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setScript_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "script", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["script"] = arg1
 	return args, nil
 }
 
@@ -858,6 +979,64 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 
 // region    **************************** field.gotpl *****************************
 
+func (ec *executionContext) _GlobalVar_key(ctx context.Context, field graphql.CollectedField, obj *model.GlobalVar) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalVar_key,
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalVar_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalVar",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalVar_value(ctx context.Context, field graphql.CollectedField, obj *model.GlobalVar) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalVar_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalVar_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalVar",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_deleteRequest(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -948,7 +1127,7 @@ func (ec *executionContext) _Mutation_createToken(ctx context.Context, field gra
 		ec.fieldContext_Mutation_createToken,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateToken(ctx, fc.Args["defaultStatus"].(*int), fc.Args["defaultContent"].(*string), fc.Args["defaultContentType"].(*string), fc.Args["timeout"].(*int), fc.Args["cors"].(*bool))
+			return ec.Resolvers.Mutation().CreateToken(ctx, fc.Args["defaultStatus"].(*int), fc.Args["defaultContent"].(*string), fc.Args["defaultContentType"].(*string), fc.Args["timeout"].(*int), fc.Args["cors"].(*bool), fc.Args["script"].(*string))
 		},
 		nil,
 		ec.marshalNToken2ᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐToken,
@@ -989,6 +1168,8 @@ func (ec *executionContext) fieldContext_Mutation_createToken(ctx context.Contex
 				return ec.fieldContext_Token_timeout(ctx, field)
 			case "cors":
 				return ec.fieldContext_Token_cors(ctx, field)
+			case "script":
+				return ec.fieldContext_Token_script(ctx, field)
 			case "requests":
 				return ec.fieldContext_Token_requests(ctx, field)
 			}
@@ -1058,6 +1239,8 @@ func (ec *executionContext) fieldContext_Mutation_updateToken(ctx context.Contex
 				return ec.fieldContext_Token_timeout(ctx, field)
 			case "cors":
 				return ec.fieldContext_Token_cors(ctx, field)
+			case "script":
+				return ec.fieldContext_Token_script(ctx, field)
 			case "requests":
 				return ec.fieldContext_Token_requests(ctx, field)
 			}
@@ -1072,6 +1255,77 @@ func (ec *executionContext) fieldContext_Mutation_updateToken(ctx context.Contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setScript(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setScript,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetScript(ctx, fc.Args["id"].(string), fc.Args["script"].(string))
+		},
+		nil,
+		ec.marshalNToken2ᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐToken,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setScript(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Token_id(ctx, field)
+			case "agentId":
+				return ec.fieldContext_Token_agentId(ctx, field)
+			case "url":
+				return ec.fieldContext_Token_url(ctx, field)
+			case "ip":
+				return ec.fieldContext_Token_ip(ctx, field)
+			case "userAgent":
+				return ec.fieldContext_Token_userAgent(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Token_createdAt(ctx, field)
+			case "requestCount":
+				return ec.fieldContext_Token_requestCount(ctx, field)
+			case "defaultStatus":
+				return ec.fieldContext_Token_defaultStatus(ctx, field)
+			case "defaultContent":
+				return ec.fieldContext_Token_defaultContent(ctx, field)
+			case "defaultContentType":
+				return ec.fieldContext_Token_defaultContentType(ctx, field)
+			case "timeout":
+				return ec.fieldContext_Token_timeout(ctx, field)
+			case "cors":
+				return ec.fieldContext_Token_cors(ctx, field)
+			case "script":
+				return ec.fieldContext_Token_script(ctx, field)
+			case "requests":
+				return ec.fieldContext_Token_requests(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Token", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setScript_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -1209,6 +1463,8 @@ func (ec *executionContext) fieldContext_Mutation_claimToken(ctx context.Context
 				return ec.fieldContext_Token_timeout(ctx, field)
 			case "cors":
 				return ec.fieldContext_Token_cors(ctx, field)
+			case "script":
+				return ec.fieldContext_Token_script(ctx, field)
 			case "requests":
 				return ec.fieldContext_Token_requests(ctx, field)
 			}
@@ -1223,6 +1479,94 @@ func (ec *executionContext) fieldContext_Mutation_claimToken(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_claimToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setGlobalVar(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setGlobalVar,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetGlobalVar(ctx, fc.Args["key"].(string), fc.Args["value"].(string))
+		},
+		nil,
+		ec.marshalNGlobalVar2ᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐGlobalVar,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setGlobalVar(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_GlobalVar_key(ctx, field)
+			case "value":
+				return ec.fieldContext_GlobalVar_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GlobalVar", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setGlobalVar_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteGlobalVar(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteGlobalVar,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteGlobalVar(ctx, fc.Args["key"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteGlobalVar(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteGlobalVar_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -1404,6 +1748,8 @@ func (ec *executionContext) fieldContext_Query_token(ctx context.Context, field 
 				return ec.fieldContext_Token_timeout(ctx, field)
 			case "cors":
 				return ec.fieldContext_Token_cors(ctx, field)
+			case "script":
+				return ec.fieldContext_Token_script(ctx, field)
 			case "requests":
 				return ec.fieldContext_Token_requests(ctx, field)
 			}
@@ -1472,10 +1818,47 @@ func (ec *executionContext) fieldContext_Query_tokens(_ context.Context, field g
 				return ec.fieldContext_Token_timeout(ctx, field)
 			case "cors":
 				return ec.fieldContext_Token_cors(ctx, field)
+			case "script":
+				return ec.fieldContext_Token_script(ctx, field)
 			case "requests":
 				return ec.fieldContext_Token_requests(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Token", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_globalVars(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_globalVars,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().GlobalVars(ctx)
+		},
+		nil,
+		ec.marshalNGlobalVar2ᚕᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐGlobalVarᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_globalVars(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_GlobalVar_key(ctx, field)
+			case "value":
+				return ec.fieldContext_GlobalVar_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GlobalVar", field.Name)
 		},
 	}
 	return fc, nil
@@ -2704,6 +3087,35 @@ func (ec *executionContext) fieldContext_Token_cors(_ context.Context, field gra
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Token_script(ctx context.Context, field graphql.CollectedField, obj *model.Token) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Token_script,
+		func(ctx context.Context) (any, error) {
+			return obj.Script, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Token_script(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Token",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -4220,6 +4632,50 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** object.gotpl ****************************
 
+var globalVarImplementors = []string{"GlobalVar"}
+
+func (ec *executionContext) _GlobalVar(ctx context.Context, sel ast.SelectionSet, obj *model.GlobalVar) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, globalVarImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GlobalVar")
+		case "key":
+			out.Values[i] = ec._GlobalVar_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._GlobalVar_value(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -4267,6 +4723,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "setScript":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setScript(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "toggleCors":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_toggleCors(ctx, field)
@@ -4284,6 +4747,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "claimToken":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_claimToken(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setGlobalVar":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setGlobalVar(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteGlobalVar":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteGlobalVar(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -4400,6 +4877,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_tokens(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "globalVars":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_globalVars(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -4745,6 +5244,11 @@ func (ec *executionContext) _Token(ctx context.Context, sel ast.SelectionSet, ob
 			}
 		case "cors":
 			out.Values[i] = ec._Token_cors(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "script":
+			out.Values[i] = ec._Token_script(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -5156,6 +5660,36 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNGlobalVar2githubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐGlobalVar(ctx context.Context, sel ast.SelectionSet, v model.GlobalVar) graphql.Marshaler {
+	return ec._GlobalVar(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNGlobalVar2ᚕᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐGlobalVarᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.GlobalVar) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNGlobalVar2ᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐGlobalVar(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNGlobalVar2ᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐGlobalVar(ctx context.Context, sel ast.SelectionSet, v *model.GlobalVar) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GlobalVar(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {

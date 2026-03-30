@@ -1,14 +1,18 @@
 extend type Query {
   token(id: ID!): Token
   tokens: [Token!]!
+  globalVars: [GlobalVar!]!
 }
 
 extend type Mutation {
-  createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+  createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean, script: String): Token!
   updateToken(id: ID!, defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+  setScript(id: ID!, script: String!): Token!
   toggleCors(id: ID!): Boolean!
   deleteToken(id: ID!): Boolean!
   claimToken(id: ID!): Token!
+  setGlobalVar(key: String!, value: String!): GlobalVar!
+  deleteGlobalVar(key: String!): Boolean!
 }
 
 type Token {
@@ -24,5 +28,11 @@ type Token {
   defaultContentType: String!
   timeout: Int!
   cors: Boolean!
+  script: String!
   requests: [Request!]! @goField(forceResolver: true)
+}
+
+type GlobalVar {
+  key: String!
+  value: String!
 }

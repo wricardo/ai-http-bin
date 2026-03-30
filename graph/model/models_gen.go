@@ -2,6 +2,11 @@
 
 package model
 
+type GlobalVar struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type Mutation struct {
 }
 
@@ -56,5 +61,6 @@ type Token struct {
 	DefaultContentType string     `json:"defaultContentType"`
 	Timeout            int        `json:"timeout"`
 	Cors               bool       `json:"cors"`
+	Script             string     `json:"script"`
 	Requests           []*Request `json:"requests"`
 }

@@ -34,6 +34,7 @@ A token represents a unique webhook endpoint. Creating a token gives you a URL. 
 | default_content_type | string | Content-Type of the response (default: `text/plain`) |
 | timeout | integer (0–10) | Seconds to wait before responding; `0` means no delay |
 | cors | boolean | Whether to add CORS headers to webhook responses (default: `false`) |
+| script | string | JS script to run on each request; overrides static response when non-empty |
 
 ### Request
 
@@ -81,6 +82,10 @@ All under `/api/`. All accept optional `X-Agent-Id` header.
 | GET | /api/requests/:id | Get a single captured request |
 | DELETE | /api/requests/:id | Delete a single request |
 | POST | /api/claim/:id | Claim an anonymous token (requires X-Agent-Id) |
+| PUT | /api/tokens/:id/script | Set a JS script on the token |
+| GET | /api/vars | List all global variables |
+| PUT | /api/vars/:key | Set a global variable (body: `{"value":"..."}`) |
+| DELETE | /api/vars/:key | Delete a global variable |
 
 ### Webhook Receiver (REST)
 
@@ -93,12 +98,35 @@ Accepts any HTTP method at `/:token` and `/:token/*path`.
 
 #### Custom Response
 
+0. **Script** (highest priority) — if the token has a non-empty `script`, run it. The script's `respond()` call determines status, body, and content-type. Static response fields are ignored.
 1. **Status code** — use `default_status`. If the path segment immediately after the token is a valid HTTP status code (matching `[1-5][0-9][0-9]`), use that value instead.
 2. **Body** — use `default_content`.
 3. **Content-Type header** — use `default_content_type`.
 4. **`X-Request-Id` header** — the UUID assigned to the captured request.
 5. **`X-Token-Id` header** — the token UUID.
 6. **CORS headers** — added if the token has `cors: true`.
+
+#### Scripting
+
+When a token has a non-empty `script`, it runs as JavaScript (ES5+) on every request. The script has access to:
+
+| Global | Description |
+|--------|-------------|
+| `request` | Object with `method`, `path`, `body`, `query` (map), `headers` (map), `formData` (map) |
+| `respond(status, body, contentType?, headers?)` | Sets the HTTP response |
+| `store(key, value)` | Persists a global variable (shared across all tokens) |
+| `load(key)` | Reads a global variable; returns `""` if missing |
+| `del(key)` | Deletes a global variable |
+| `JSON.stringify(v)` | Serializes a value to JSON |
+| `JSON.parse(s)` | Parses a JSON string |
+
+- If the script does not call `respond()`, the response defaults to `200 ""`.
+- Scripts are limited to 2 seconds of execution. Errors return `500` with an `X-Script-Error` response header.
+- Global variables are server-wide (not scoped to a token or agent).
+
+#### Global Variables
+
+A server-wide key-value store accessible from scripts via `store()`/`load()`. Also exposed over REST and GraphQL for direct management.
 
 #### CORS Headers (when enabled)
 
@@ -120,18 +148,22 @@ token(id: ID!): Token
 tokens: [Token!]!
 request(id: ID!): Request
 requests(tokenId: ID!, page: Int, perPage: Int, sorting: String): RequestPage!
+globalVars: [GlobalVar!]!
 ```
 
 **Mutations**
 
 ```graphql
-createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean, script: String): Token!
 updateToken(id: ID!, defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
+setScript(id: ID!, script: String!): Token!
 toggleCors(id: ID!): Boolean!
 deleteToken(id: ID!): Boolean!
 claimToken(id: ID!): Token!
 deleteRequest(id: ID!): Boolean!
 clearRequests(tokenId: ID!): Boolean!
+setGlobalVar(key: String!, value: String!): GlobalVar!
+deleteGlobalVar(key: String!): Boolean!
 ```
 
 **Subscriptions**

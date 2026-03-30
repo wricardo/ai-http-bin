@@ -19,6 +19,7 @@ type Token struct {
 	DefaultContentType string
 	Timeout            int
 	Cors               bool
+	Script             string // JS script; when set, overrides static response
 }
 
 type Request struct {
@@ -52,6 +53,7 @@ type Store struct {
 	mu          sync.RWMutex
 	tokens      map[string]*Token
 	requests    map[string][]*Request // tokenID -> requests
+	globalVars  map[string]string     // key -> value, shared across all tokens
 	subscribers []*Subscriber
 	subMu       sync.RWMutex
 
@@ -62,6 +64,7 @@ func New() *Store {
 	return &Store{
 		tokens:              make(map[string]*Token),
 		requests:            make(map[string][]*Request),
+		globalVars:          make(map[string]string),
 		MaxRequestsPerToken: 500,
 	}
 }
@@ -299,4 +302,44 @@ func (s *Store) ClaimToken(tokenID, agentID string) (*Token, bool) {
 
 func (s *Store) TokenURL(baseURL, tokenID string) string {
 	return fmt.Sprintf("%s/%s", baseURL, tokenID)
+}
+
+func (s *Store) SetScript(tokenID, script string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tokens[tokenID]
+	if !ok {
+		return false
+	}
+	t.Script = script
+	return true
+}
+
+func (s *Store) SetGlobalVar(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.globalVars[key] = value
+}
+
+func (s *Store) GetGlobalVar(key string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v, ok := s.globalVars[key]
+	return v, ok
+}
+
+func (s *Store) DeleteGlobalVar(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.globalVars, key)
+}
+
+func (s *Store) ListGlobalVars() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]string, len(s.globalVars))
+	for k, v := range s.globalVars {
+		out[k] = v
+	}
+	return out
 }

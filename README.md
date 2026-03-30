@@ -100,6 +100,52 @@ curl -o /dev/null -w "%{http_code}" http://localhost:8082/abc123.../404
 
 ---
 
+## Scripted Mock Endpoints
+
+Tokens can run a JS script on every request, giving you dynamic responses and persistent state across calls — enough to build a full stateful mock API on a single token.
+
+```bash
+curl -s -X POST http://localhost:8082/api/tokens \
+  -H "Content-Type: application/json" \
+  -d '{
+    "script": "var items = JSON.parse(load(\"items\") || \"[]\"); if (request.method === \"POST\") { var b = JSON.parse(request.body || \"{}\"); items.push(b); store(\"items\", JSON.stringify(items)); respond(201, JSON.stringify(b), \"application/json\"); } else { respond(200, JSON.stringify(items), \"application/json\"); }"
+  }' | jq '.url'
+```
+
+**Scripting API** (available inside every script):
+
+| Name | Signature | Description |
+|------|-----------|-------------|
+| `request` | object | `method`, `path`, `body`, `query`, `headers`, `formData` |
+| `respond` | `(status, body, contentType?, headers?)` | Set the HTTP response |
+| `store` | `(key, value)` | Persist a value across requests |
+| `load` | `(key) → string` | Read a persisted value (`""` if missing) |
+| `del` | `(key)` | Delete a persisted value |
+| `JSON.stringify` / `JSON.parse` | helpers | Serialize/parse JSON |
+
+- Scripts run ES5+ JavaScript via [goja](https://github.com/dop251/goja) — no Node, no CGO.
+- Execution is limited to **2 seconds**. Errors return `500` with an `X-Script-Error` header.
+- Global variables are shared across all tokens in the same server instance.
+
+### Set a script after token creation
+
+```bash
+curl -s -X PUT http://localhost:8082/api/tokens/<token-id>/script \
+  -H "Content-Type: application/json" \
+  -d '{"script": "respond(418, \"I am a teapot\", \"text/plain\");"}'
+```
+
+### Global variables (shared state)
+
+```bash
+curl http://localhost:8082/api/vars                          # list all
+curl -X PUT http://localhost:8082/api/vars/mykey \
+  -H "Content-Type: application/json" -d '{"value":"hello"}' # set
+curl -X DELETE http://localhost:8082/api/vars/mykey           # delete
+```
+
+---
+
 ## Agent Auth
 
 No signup forms. No OAuth. An agent picks a UUID, sends it as a header, done.
@@ -141,12 +187,16 @@ All under `/api/`. All accept optional `X-Agent-Id` header.
 | `GET` | `/api/tokens` | List tokens (filtered by agent if header present) |
 | `GET` | `/api/tokens/:id` | Get a token |
 | `PUT` | `/api/tokens/:id` | Update a token |
+| `PUT` | `/api/tokens/:id/script` | Set a JS script on the token |
 | `DELETE` | `/api/tokens/:id` | Delete a token and all its requests |
 | `GET` | `/api/tokens/:id/requests` | List captured requests (`?page=1&per_page=50&sorting=oldest`) |
 | `DELETE` | `/api/tokens/:id/requests` | Clear all requests |
 | `GET` | `/api/requests/:id` | Get a single request |
 | `DELETE` | `/api/requests/:id` | Delete a single request |
 | `POST` | `/api/claim/:id` | Claim an anonymous token (requires `X-Agent-Id`) |
+| `GET` | `/api/vars` | List all global variables |
+| `PUT` | `/api/vars/:key` | Set a global variable |
+| `DELETE` | `/api/vars/:key` | Delete a global variable |
 
 ---
 
@@ -158,8 +208,19 @@ Full GraphQL at `POST /graphql`. Interactive playground at `GET /playground`.
 # Create
 mutation { createToken(defaultStatus: 201, cors: true) { id url } }
 
+# Create with script
+mutation { createToken(script: "respond(200, load(\"hits\") || \"0\", \"text/plain\");") { id url } }
+
+# Set script on existing token
+mutation { setScript(id: "...", script: "respond(204, \"\", \"text/plain\");") { id script } }
+
 # Inspect
 query { requests(tokenId: "...", sorting: "newest") { data { method body headers } } }
+
+# Global variables
+query { globalVars { key value } }
+mutation { setGlobalVar(key: "foo", value: "bar") { key value } }
+mutation { deleteGlobalVar(key: "foo") }
 
 # Real-time (WebSocket)
 subscription { requestReceived(tokenId: "...") { request { method url body } } }

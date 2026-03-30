@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wricardo/ai-http-bin/internal/script"
 	"github.com/wricardo/ai-http-bin/internal/store"
 )
 
@@ -100,6 +101,29 @@ func (h *Handler) capture(c *gin.Context) {
 
 	h.store.AddRequest(req)
 
+	c.Header("X-Request-Id", req.ID)
+	c.Header("X-Token-Id", tokenID)
+	if token.Cors {
+		for k, v := range corsHeaders {
+			c.Header(k, v)
+		}
+	}
+
+	// Script takes priority over static response
+	if token.Script != "" {
+		resp, err := script.Run(token.Script, req, h.store)
+		if err != nil {
+			c.Header("X-Script-Error", err.Error())
+			c.Data(http.StatusInternalServerError, "text/plain", []byte("script error: "+err.Error()))
+			return
+		}
+		for k, v := range resp.Headers {
+			c.Header(k, v)
+		}
+		c.Data(resp.Status, resp.ContentType, []byte(resp.Body))
+		return
+	}
+
 	// Determine response status: path segment overrides token default
 	status := token.DefaultStatus
 	if seg := strings.TrimPrefix(path, "/"); statusCodePattern.MatchString(seg) {
@@ -108,14 +132,6 @@ func (h *Handler) capture(c *gin.Context) {
 			code = code*10 + int(b-'0')
 		}
 		status = code
-	}
-
-	c.Header("X-Request-Id", req.ID)
-	c.Header("X-Token-Id", tokenID)
-	if token.Cors {
-		for k, v := range corsHeaders {
-			c.Header(k, v)
-		}
 	}
 
 	c.Data(status, token.DefaultContentType, []byte(token.DefaultContent))

@@ -19,11 +19,15 @@ func (a *restAPI) register(r *gin.RouterGroup) {
 	r.GET("/tokens/:id", a.getToken)
 	r.PUT("/tokens/:id", a.updateToken)
 	r.DELETE("/tokens/:id", a.deleteToken)
+	r.PUT("/tokens/:id/script", a.setScript)
 	r.GET("/tokens/:id/requests", a.listRequests)
 	r.DELETE("/tokens/:id/requests", a.clearRequests)
 	r.GET("/requests/:id", a.getRequest)
 	r.DELETE("/requests/:id", a.deleteRequest)
 	r.POST("/claim/:id", a.claimToken)
+	r.GET("/vars", a.listGlobalVars)
+	r.PUT("/vars/:key", a.setGlobalVar)
+	r.DELETE("/vars/:key", a.deleteGlobalVar)
 }
 
 func (a *restAPI) agentID(c *gin.Context) string {
@@ -36,6 +40,7 @@ type createTokenRequest struct {
 	DefaultContentType *string `json:"default_content_type"`
 	Timeout            *int    `json:"timeout"`
 	Cors               *bool   `json:"cors"`
+	Script             *string `json:"script"`
 }
 
 func (a *restAPI) createToken(c *gin.Context) {
@@ -58,6 +63,9 @@ func (a *restAPI) createToken(c *gin.Context) {
 	}
 	if req.Cors != nil {
 		t.Cors = *req.Cors
+	}
+	if req.Script != nil {
+		t.Script = *req.Script
 	}
 
 	c.JSON(http.StatusCreated, tokenJSON(a.store, a.baseURL, t))
@@ -112,6 +120,9 @@ func (a *restAPI) updateToken(c *gin.Context) {
 	}
 	if req.Cors != nil {
 		t.Cors = *req.Cors
+	}
+	if req.Script != nil {
+		t.Script = *req.Script
 	}
 	a.store.UpdateToken(t.ID, t.DefaultContent, t.DefaultContentType, t.DefaultStatus, t.Timeout, t.Cors)
 	c.JSON(http.StatusOK, tokenJSON(a.store, a.baseURL, t))
@@ -187,6 +198,48 @@ func (a *restAPI) claimToken(c *gin.Context) {
 	c.JSON(http.StatusOK, tokenJSON(a.store, a.baseURL, t))
 }
 
+func (a *restAPI) setScript(c *gin.Context) {
+	var body struct {
+		Script string `json:"script"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if !a.store.SetScript(c.Param("id"), body.Script) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "token not found"})
+		return
+	}
+	t, _ := a.store.GetToken(c.Param("id"))
+	c.JSON(http.StatusOK, tokenJSON(a.store, a.baseURL, t))
+}
+
+func (a *restAPI) listGlobalVars(c *gin.Context) {
+	vars := a.store.ListGlobalVars()
+	out := make([]gin.H, 0, len(vars))
+	for k, v := range vars {
+		out = append(out, gin.H{"key": k, "value": v})
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func (a *restAPI) setGlobalVar(c *gin.Context) {
+	var body struct {
+		Value string `json:"value"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	a.store.SetGlobalVar(c.Param("key"), body.Value)
+	c.JSON(http.StatusOK, gin.H{"key": c.Param("key"), "value": body.Value})
+}
+
+func (a *restAPI) deleteGlobalVar(c *gin.Context) {
+	a.store.DeleteGlobalVar(c.Param("key"))
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
 func tokenJSON(s *store.Store, baseURL string, t *store.Token) gin.H {
 	h := gin.H{
 		"id":                   t.ID,
@@ -200,6 +253,7 @@ func tokenJSON(s *store.Store, baseURL string, t *store.Token) gin.H {
 		"default_content_type": t.DefaultContentType,
 		"timeout":              t.Timeout,
 		"cors":                 t.Cors,
+		"script":               t.Script,
 	}
 	if t.AgentID != "" {
 		h["agent_id"] = t.AgentID
