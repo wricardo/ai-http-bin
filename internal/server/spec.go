@@ -25,7 +25,7 @@ Base URL: {{BASE_URL}}
 
 ## How it works
 
-1. POST /api/tokens — create a unique webhook URL
+1. POST /api/tokens — create a unique webhook URL (expires after 24h, stores last 50 requests)
 2. Send any HTTP request to {{BASE_URL}}/<token-id>
 3. GET /api/tokens/<token-id>/requests — inspect captured requests
 
@@ -97,6 +97,8 @@ Response:
 {
   "id": "a1b2c3d4-...",
   "url": "{{BASE_URL}}/a1b2c3d4-...",
+  "created_at": "2026-01-01T12:00:00Z",
+  "expires_at": "2026-01-02T12:00:00Z",
   "default_status": 200,
   "default_content": "",
   "default_content_type": "text/plain",
@@ -164,6 +166,11 @@ cannot be re-claimed.
 All responses are JSON. All endpoints accept ` + "`X-Agent-Id`" + ` header (optional).
 
 ### Tokens
+
+Tokens expire 24 hours after creation. Expired tokens return ` + "`410 Gone`" + ` to
+incoming webhook requests and are omitted from list responses. Each token stores
+at most 50 requests; once that limit is reached the oldest request is dropped
+to make room for each new one (FIFO eviction).
 
 #### Create Token
 
@@ -321,7 +328,7 @@ Any HTTP method to ` + "`/:token`" + ` or ` + "`/:token/*path`" + ` is captured 
 - **Headers**: ` + "`X-Request-Id`" + ` and ` + "`X-Token-Id`" + ` are always set.
 - **CORS**: If ` + "`cors`" + ` is enabled on the token, standard CORS headers are added.
 - **Timeout**: If set, the server waits N seconds before responding (applies before script runs).
-- **Unknown token**: Returns ` + "`410 Gone`" + `.
+- **Unknown or expired token**: Returns ` + "`410 Gone`" + `.
 
 ### Scripting API
 

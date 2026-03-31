@@ -55,6 +55,7 @@ type Token struct {
 	IP                 string     `json:"ip"`
 	UserAgent          string     `json:"userAgent"`
 	CreatedAt          string     `json:"createdAt"`
+	ExpiresAt          string     `json:"expiresAt"`
 	RequestCount       int        `json:"requestCount"`
 	DefaultStatus      int        `json:"defaultStatus"`
 	DefaultContent     string     `json:"defaultContent"`

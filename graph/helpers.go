@@ -31,6 +31,10 @@ func storeTokenToModel(s *store.Store, baseURL string, t *store.Token) *model.To
 	if t.AgentID != "" {
 		agentID = &t.AgentID
 	}
+	expiresAt := ""
+	if !t.ExpiresAt.IsZero() {
+		expiresAt = t.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+	}
 	return &model.Token{
 		ID:                 t.ID,
 		AgentID:            agentID,
@@ -38,6 +42,7 @@ func storeTokenToModel(s *store.Store, baseURL string, t *store.Token) *model.To
 		IP:                 t.IP,
 		UserAgent:          t.UserAgent,
 		CreatedAt:          t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ExpiresAt:          expiresAt,
 		RequestCount:       s.RequestCount(t.ID),
 		DefaultStatus:      t.DefaultStatus,
 		DefaultContent:     t.DefaultContent,

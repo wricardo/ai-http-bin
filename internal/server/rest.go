@@ -255,6 +255,9 @@ func tokenJSON(s *store.Store, baseURL string, t *store.Token) gin.H {
 		"cors":                 t.Cors,
 		"script":               t.Script,
 	}
+	if !t.ExpiresAt.IsZero() {
+		h["expires_at"] = t.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+	}
 	if t.AgentID != "" {
 		h["agent_id"] = t.AgentID
 	}

@@ -14,6 +14,7 @@ type Token struct {
 	IP                 string
 	UserAgent          string
 	CreatedAt          time.Time
+	ExpiresAt          time.Time // zero means no expiry
 	DefaultStatus      int
 	DefaultContent     string
 	DefaultContentType string
@@ -57,7 +58,12 @@ type Store struct {
 	subscribers []*Subscriber
 	subMu       sync.RWMutex
 
+	// MaxRequestsPerToken is the FIFO eviction limit per token (default 50).
+	// When a new request arrives and the count exceeds this, the oldest request is dropped.
 	MaxRequestsPerToken int
+	// TokenTTL is how long a token lives after creation (default 24h).
+	// Zero disables expiry.
+	TokenTTL time.Duration
 }
 
 func New() *Store {
@@ -65,17 +71,24 @@ func New() *Store {
 		tokens:              make(map[string]*Token),
 		requests:            make(map[string][]*Request),
 		globalVars:          make(map[string]string),
-		MaxRequestsPerToken: 500,
+		MaxRequestsPerToken: 50,
+		TokenTTL:            24 * time.Hour,
 	}
 }
 
 func (s *Store) CreateToken(ip, userAgent, agentID string) *Token {
+	now := time.Now()
+	var expiresAt time.Time
+	if s.TokenTTL > 0 {
+		expiresAt = now.Add(s.TokenTTL)
+	}
 	t := &Token{
 		ID:                 uuid.New().String(),
 		AgentID:            agentID,
 		IP:                 ip,
 		UserAgent:          userAgent,
-		CreatedAt:          time.Now(),
+		CreatedAt:          now,
+		ExpiresAt:          expiresAt,
 		DefaultStatus:      200,
 		DefaultContent:     "",
 		DefaultContentType: "text/plain",
@@ -117,15 +130,24 @@ func (s *Store) GetToken(id string) (*Token, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	t, ok := s.tokens[id]
-	return t, ok
+	if !ok {
+		return nil, false
+	}
+	if !t.ExpiresAt.IsZero() && time.Now().After(t.ExpiresAt) {
+		return nil, false
+	}
+	return t, true
 }
 
 func (s *Store) ListTokens() []*Token {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	now := time.Now()
 	result := make([]*Token, 0, len(s.tokens))
 	for _, t := range s.tokens {
-		result = append(result, t)
+		if t.ExpiresAt.IsZero() || now.Before(t.ExpiresAt) {
+			result = append(result, t)
+		}
 	}
 	return result
 }
@@ -141,10 +163,18 @@ func (s *Store) DeleteToken(id string) bool {
 	return true
 }
 
-func (s *Store) IsOverQuota(tokenID string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.requests[tokenID]) >= s.MaxRequestsPerToken
+// CleanupExpired deletes all tokens whose ExpiresAt is in the past, along with
+// their captured requests. Safe to call from a background goroutine.
+func (s *Store) CleanupExpired() {
+	now := time.Now()
+	s.mu.Lock()
+	for id, t := range s.tokens {
+		if !t.ExpiresAt.IsZero() && now.After(t.ExpiresAt) {
+			delete(s.tokens, id)
+			delete(s.requests, id)
+		}
+	}
+	s.mu.Unlock()
 }
 
 func (s *Store) AddRequest(req *Request) {
@@ -153,6 +183,10 @@ func (s *Store) AddRequest(req *Request) {
 
 	s.mu.Lock()
 	s.requests[req.TokenID] = append(s.requests[req.TokenID], req)
+	// FIFO eviction: drop the oldest request when the per-token cap is exceeded.
+	if s.MaxRequestsPerToken > 0 && len(s.requests[req.TokenID]) > s.MaxRequestsPerToken {
+		s.requests[req.TokenID] = s.requests[req.TokenID][1:]
+	}
 	total := len(s.requests[req.TokenID])
 	s.mu.Unlock()
 
@@ -277,9 +311,10 @@ func (s *Store) Unsubscribe(sub *Subscriber) {
 func (s *Store) ListTokensByAgent(agentID string) []*Token {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	now := time.Now()
 	var result []*Token
 	for _, t := range s.tokens {
-		if t.AgentID == agentID {
+		if t.AgentID == agentID && (t.ExpiresAt.IsZero() || now.Before(t.ExpiresAt)) {
 			result = append(result, t)
 		}
 	}

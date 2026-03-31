@@ -269,7 +269,10 @@ func TestRequestCapturesIPUserAgentCreatedAt(t *testing.T) {
 	t.Logf("ip=%s userAgent=%s createdAt=%s", req.IP, req.UserAgent, req.CreatedAt)
 }
 
-// --- REQ-028, REQ-057: per-token request quota returns 410 ---
+// --- REQ-028, REQ-057: per-token request quota uses FIFO eviction ---
+//
+// Requests beyond the per-token cap are accepted (200) but the oldest
+// stored request is evicted to make room. The cap is never exceeded.
 
 func TestQuotaEnforcement(t *testing.T) {
 	// Start a dedicated server with a quota of 2.
@@ -296,20 +299,29 @@ func TestQuotaEnforcement(t *testing.T) {
 	}
 	var result gqlResponse[data]
 	json.Unmarshal(resp.Body(), &result) //nolint:errcheck
+	tokenID := result.Data.CreateToken.ID
 	tokenURL := result.Data.CreateToken.URL
 
-	// Fill quota.
-	for i := range 2 {
+	// Send 3 requests — all must succeed.
+	for i := range 3 {
 		r := sendWebhook(t, tokenURL, http.MethodGet, "", "")
 		if r.StatusCode() != 200 {
 			t.Fatalf("request %d: expected 200, got %d", i+1, r.StatusCode())
 		}
 	}
 
-	// Next request must be 410.
-	over := sendWebhook(t, tokenURL, http.MethodGet, "", "")
-	if over.StatusCode() != http.StatusGone {
-		t.Errorf("over-quota status: got %d, want 410", over.StatusCode())
+	// Only 2 requests must be stored (oldest was evicted).
+	listResp, err := client().SetBaseURL(quotaURL).R().
+		Get("/api/tokens/" + tokenID + "/requests")
+	if err != nil {
+		t.Fatalf("list requests: %v", err)
+	}
+	var listResult struct {
+		Total int `json:"total"`
+	}
+	json.Unmarshal(listResp.Body(), &listResult) //nolint:errcheck
+	if listResult.Total != 2 {
+		t.Errorf("stored request count: got %d, want 2", listResult.Total)
 	}
 }
 

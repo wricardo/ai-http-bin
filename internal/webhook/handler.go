@@ -43,11 +43,6 @@ func (h *Handler) capture(c *gin.Context) {
 		return
 	}
 
-	if h.store.IsOverQuota(tokenID) {
-		c.String(http.StatusGone, "Too many requests, please create a new URL/token")
-		return
-	}
-
 	if token.Timeout > 0 {
 		time.Sleep(time.Duration(token.Timeout) * time.Second)
 	}

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
@@ -16,9 +17,16 @@ import (
 // Option configures the server.
 type Option func(*store.Store)
 
-// WithMaxRequestsPerToken sets the per-token request quota (default 500).
+// WithMaxRequestsPerToken sets the per-token FIFO eviction limit (default 50).
+// When a token exceeds this count the oldest request is dropped to make room.
 func WithMaxRequestsPerToken(n int) Option {
 	return func(s *store.Store) { s.MaxRequestsPerToken = n }
+}
+
+// WithTokenTTL sets how long a token lives after creation (default 24h).
+// Pass 0 to disable expiry entirely (useful for self-hosted deployments).
+func WithTokenTTL(d time.Duration) Option {
+	return func(s *store.Store) { s.TokenTTL = d }
 }
 
 // New builds an http.Server wired to the given baseURL.
@@ -27,6 +35,17 @@ func New(baseURL string, opts ...Option) *http.Server {
 	s := store.New()
 	for _, o := range opts {
 		o(s)
+	}
+
+	// Background goroutine: sweep expired tokens every minute.
+	if s.TokenTTL > 0 {
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
+				s.CleanupExpired()
+			}
+		}()
 	}
 
 	resolver := &graph.Resolver{
