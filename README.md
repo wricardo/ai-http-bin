@@ -1,35 +1,45 @@
 # AI HTTP Bin
 
-**Webhook inspection + mock endpoints, built for AI agents.**
-
-An AI agent reads `GET /` and knows exactly how to create webhook URLs, mock any HTTP response, and inspect every request that comes in. No API keys, no dashboards, no docs to search — just one markdown endpoint.
-
-```bash
-# Start the server
-go run ./cmd/server
-
-# An agent's entire onboarding:
-curl http://localhost:8082/
-```
+A webhook inspection and mock HTTP endpoint service built for AI agents.
 
 ---
 
-## Why This Exists
+## What Is This
 
-AI agents that interact with external services need two things constantly:
+AI HTTP Bin gives you throwaway HTTP endpoints you can point webhooks at, send test requests to, and inspect everything that arrives. It also lets you mock any HTTP response — including dynamic ones driven by JavaScript.
 
-1. **Mock endpoints** — to simulate APIs, test callback URLs, or stand in for services that don't exist yet
-2. **Request inspection** — to verify what was actually sent, debug webhook integrations, or confirm payloads
+It runs as a single Go binary with no external dependencies. All data lives in memory.
 
-Existing tools (mockbin.io, requestbin) are built for humans clicking around in browsers. This is built for agents making HTTP calls.
+---
 
-### What Makes It Different
+## Why It Exists
 
-- **`GET /` returns a markdown API spec.** An agent reads one URL and can fully operate the service. No separate docs site, no OpenAPI file to find.
-- **Zero-friction auth.** No signup flow. No API keys to provision. An agent picks a UUID and starts using it as `X-Agent-Id`. That's the entire registration process.
-- **Guest-to-registered upgrade.** An agent can start anonymously, then claim its tokens later by providing an `X-Agent-Id`. No data loss, no re-creation.
-- **Both REST and GraphQL.** Simple REST for simple tasks, GraphQL for filtering/pagination/subscriptions.
-- **Real-time via WebSocket.** Subscribe to a token and get notified the instant a request arrives.
+AI agents that interact with external services constantly need two things:
+
+1. **A place to receive webhooks** — to verify callbacks are being sent, check what payload a service actually delivers, or confirm an integration is wired up correctly.
+2. **Mock endpoints** — to stand in for APIs that don't exist yet, simulate specific responses, or test how a client handles edge cases like 429s or malformed JSON.
+
+Existing tools (mockbin.io, requestbin) are built for humans clicking around dashboards. This is built for agents making HTTP calls.
+
+---
+
+## What It Does
+
+- **Create a webhook URL** with a single POST. Any request sent to that URL is captured and stored.
+- **Inspect captured requests** — method, headers, body, query params, form data, IP, timestamp — everything.
+- **Mock any HTTP response** — set the status code, body, and content type on the token. Override status via path (`/token/404`).
+- **Write JS scripts** on tokens to return dynamic responses, route by method, and maintain state across requests.
+- **Real-time notifications** via WebSocket subscription — know the instant a request arrives.
+- **Scope tokens to an agent identity** with a header — no signup, no OAuth, just bring a UUID.
+
+---
+
+## How It Helps
+
+- `GET /` returns a markdown API spec. An agent reads one URL and can fully operate the service — no separate docs, no OpenAPI file to hunt for.
+- No signup. No API keys. An agent picks a UUID and sends it as `X-Agent-Id`. That's the whole auth flow.
+- Tokens are anonymous by default. Start without any identity and claim tokens later with no data loss.
+- Both REST and GraphQL, so agents can use whichever fits their style.
 
 ---
 
@@ -50,11 +60,14 @@ curl -s -X POST http://localhost:8082/api/tokens | jq
 {
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "url": "http://localhost:8082/f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "expires_at": "2026-01-02T12:00:00Z",
   "default_status": 200,
   "default_content_type": "text/plain",
   "request_count": 0
 }
 ```
+
+Tokens expire 24 hours after creation. Each token stores at most 50 requests; once full, the oldest is dropped on each new arrival (FIFO).
 
 ### Send something to it
 
@@ -97,6 +110,16 @@ Override the status code via path:
 curl -o /dev/null -w "%{http_code}" http://localhost:8082/abc123.../404
 # => 404
 ```
+
+Enable CORS or simulate latency at creation time:
+
+```bash
+curl -s -X POST http://localhost:8082/api/tokens \
+  -H "Content-Type: application/json" \
+  -d '{"cors": true, "timeout": 2}'
+```
+
+An expired or unknown token returns `410 Gone`. Every webhook response includes `X-Request-Id` and `X-Token-Id` headers.
 
 ---
 
@@ -233,6 +256,8 @@ subscription { requestReceived(tokenId: "...") { request { method url body } } }
 | Method | Path | Content-Type | Purpose |
 |--------|------|--------------|---------|
 | `GET` | `/` | `text/markdown` | Machine-readable API spec |
+| `GET` | `/llms.txt` | `text/plain` | Compact spec for LLM context |
+| `GET` | `/ui` | `text/html` | Web UI for request inspection |
 | `*` | `/api/*` | `application/json` | REST API (see above) |
 | `POST` | `/graphql` | `application/json` | GraphQL API |
 | `GET` | `/playground` | `text/html` | GraphQL interactive playground |
