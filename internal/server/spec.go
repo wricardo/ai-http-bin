@@ -12,8 +12,18 @@ func llmsTxt(baseURL string) string {
 
 const llmsTxtTemplate = `# AI HTTP Bin
 
-> Webhook inspection and mock HTTP endpoint service for AI agents.
-> Create unique URLs, capture incoming requests, and inspect them via REST or GraphQL API.
+AI agents often need to receive webhooks — callbacks from external services, confirmations
+from APIs, or signals between agent steps — but spinning up a publicly accessible HTTP
+server is too much friction. AI HTTP Bin solves this: it gives any agent an instant,
+disposable webhook URL with zero setup, letting you capture, inspect, and mock HTTP
+traffic through a clean API.
+
+Use it to:
+- Receive webhooks from third-party services during automated workflows
+- Inspect what an external service is actually sending before writing integration code
+- Mock HTTP endpoints so other agents or services have something to call
+- Pass data between agent steps using a shared, inspectable HTTP channel
+- Run scripted responses that react to request content, enabling stateful mock APIs
 
 Base URL: {{BASE_URL}}
 

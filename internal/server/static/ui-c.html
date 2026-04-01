@@ -32,10 +32,6 @@
     --cyan:      #0891B2;
     --sel:       #EFF6FF;
     --sel-border:#2563EB;
-    --header-h:  48px;
-    --footer-h:  44px;
-    --token-w:   220px;
-    --detail-w:  380px;
   }
 
   html, body {
@@ -51,7 +47,7 @@
   /* ── LAYOUT ─────────────────────────────────────────── */
   .app {
     display: grid;
-    grid-template-rows: var(--header-h) 1fr var(--footer-h);
+    grid-template-rows: 48px 1fr 44px;
     height: 100vh;
   }
 
@@ -127,23 +123,19 @@
     50%       { opacity: 0.7; box-shadow: 0 0 0 4px rgba(22, 163, 74, 0); }
   }
 
+  @keyframes flash {
+    0%   { background: rgba(37, 99, 235, 0.09); }
+    100% { background: transparent; }
+  }
+
   /* ── MAIN ────────────────────────────────────────────── */
   main {
     display: grid;
-    grid-template-columns: var(--token-w) 1fr var(--detail-w);
+    grid-template-columns: 280px 1fr;
     overflow: hidden;
   }
 
-  /* ── PANEL BASE ──────────────────────────────────────── */
-  .panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border-right: 1px solid var(--border);
-  }
-
-  .panel:last-child { border-right: none; }
-
+  /* ── PANEL HEADER ────────────────────────────────────── */
   .panel-header {
     display: flex;
     align-items: center;
@@ -159,12 +151,40 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     user-select: none;
+    flex-shrink: 0;
   }
 
   .panel-header-right {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  /* ── MASTER PANEL ────────────────────────────────────── */
+  .master-panel {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  .master-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .master-body::-webkit-scrollbar { width: 4px; }
+  .master-body::-webkit-scrollbar-track { background: transparent; }
+  .master-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── DETAIL COLUMN ───────────────────────────────────── */
+  .detail-col {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
   }
 
   .panel-body {
@@ -229,50 +249,62 @@
     border-color: var(--red);
   }
 
-  /* ── TOKEN LIST ──────────────────────────────────────── */
-  .token-item {
-    display: flex;
-    align-items: flex-start;
-    padding: 10px 10px 10px 12px;
+  /* ── TOKEN GROUP (expandable) ────────────────────────── */
+  .token-group {
     border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.1s;
-    gap: 6px;
   }
 
-  .token-item:hover { background: var(--surface2); }
+  .tg-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+    user-select: none;
+    background: var(--surface);
+  }
 
-  .token-item.active {
+  .tg-header:hover { background: var(--surface2); }
+
+  .tg-header.active {
     background: var(--sel);
-    border-left: 2px solid var(--sel-border);
+    border-left: 2px solid var(--blue);
     padding-left: 10px;
   }
 
-  .token-item-main {
+  .tg-arrow {
+    font-size: 9px;
+    color: var(--text-muted);
+    width: 10px;
+    flex-shrink: 0;
+  }
+
+  .tg-main {
     flex: 1;
     min-width: 0;
   }
 
-  .token-id {
+  .tg-id {
     font-size: 12px;
     font-weight: 500;
     color: var(--text);
     letter-spacing: 0.03em;
   }
 
-  .token-item.active .token-id { color: var(--cyan); }
+  .tg-header.active .tg-id { color: var(--blue); }
 
-  .token-meta {
+  .tg-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 3px;
+    gap: 5px;
+    margin-top: 2px;
     font-size: 10px;
     color: var(--text-dim);
     flex-wrap: wrap;
   }
 
-  .token-del-btn {
+  .tg-del-btn {
     display: none;
     align-items: center;
     justify-content: center;
@@ -285,19 +317,77 @@
     padding: 2px 4px;
     border-radius: 2px;
     flex-shrink: 0;
-    margin-top: 2px;
     font-family: inherit;
   }
 
-  .token-item:hover .token-del-btn {
-    display: flex;
-  }
+  .tg-header:hover .tg-del-btn { display: flex; }
 
-  .token-del-btn:hover {
+  .tg-del-btn:hover {
     color: var(--red);
     background: var(--red-dim);
   }
 
+  /* ── COLLAPSIBLE REQUEST LIST ────────────────────────── */
+  .tg-requests {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.2s ease;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+
+  .token-group.expanded .tg-requests {
+    max-height: 2000px;
+  }
+
+  /* ── NESTED REQUEST ROWS ─────────────────────────────── */
+  .nr-row {
+    display: grid;
+    grid-template-columns: 56px 48px 1fr auto;
+    align-items: center;
+    padding: 6px 12px 6px 24px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    font-size: 11px;
+  }
+
+  .nr-row:last-child { border-bottom: none; }
+  .nr-row:hover { background: var(--surface2); }
+
+  .nr-row.active {
+    background: var(--sel);
+    border-left: 2px solid var(--blue);
+    padding-left: 22px;
+  }
+
+  .nr-row.new-flash { animation: flash 0.6s ease; }
+
+  .nr-time {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nr-path {
+    padding: 0 6px;
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .nr-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+
+  /* ── TAGS ────────────────────────────────────────────── */
   .tag {
     padding: 1px 5px;
     border-radius: 2px;
@@ -307,16 +397,9 @@
     text-transform: uppercase;
   }
 
-  .tag-agent { background: var(--blue-dim); color: var(--blue); }
+  .tag-agent  { background: var(--blue-dim);   color: var(--blue); }
   .tag-script { background: var(--purple-dim); color: var(--purple); }
-  .tag-anon { background: var(--surface3); color: var(--text-dim); }
-
-  .req-count {
-    font-size: 10px;
-    color: var(--text-dim);
-    margin-left: auto;
-    white-space: nowrap;
-  }
+  .tag-anon   { background: var(--surface3);   color: var(--text-dim); }
 
   .ttl-label {
     font-size: 9px;
@@ -324,66 +407,20 @@
     white-space: nowrap;
   }
 
-  .ttl-label.expiring-soon {
-    color: var(--amber);
-  }
+  .ttl-label.expiring-soon { color: var(--amber); }
 
-  /* ── URL BAR ─────────────────────────────────────────── */
-  .url-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 12px;
-    background: var(--surface2);
-    border-bottom: 1px solid var(--border);
-    min-height: 30px;
-  }
-
-  .url-bar-text {
-    flex: 1;
-    color: var(--green);
-    font-size: 10px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: default;
-  }
-
-  /* ── REQUEST FEED ────────────────────────────────────── */
-  .req-row {
-    display: grid;
-    grid-template-columns: 54px 46px 1fr;
-    align-items: center;
-    gap: 0;
-    padding: 7px 12px;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-
-  .req-row:hover { background: var(--surface2); }
-
-  .req-row.active {
-    background: var(--sel);
-    border-left: 2px solid var(--sel-border);
-    padding-left: 10px;
-  }
-
-  .req-row.new-flash {
-    animation: flash 0.6s ease;
-  }
-
-  @keyframes flash {
-    0%  { background: rgba(37, 99, 235, 0.09); }
-    100%{ background: transparent; }
-  }
-
-  .req-time {
+  .token-count-chip {
     font-size: 10px;
     color: var(--text-dim);
-    font-variant-numeric: tabular-nums;
   }
 
+  .divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border2);
+  }
+
+  /* ── METHOD BADGES ───────────────────────────────────── */
   .method-badge {
     font-size: 10px;
     font-weight: 600;
@@ -399,16 +436,7 @@
   .method-PATCH  { color: var(--amber);  background: var(--amber-dim); }
   .method-DELETE { color: var(--red);    background: var(--red-dim); }
 
-  .req-path {
-    padding: 0 8px;
-    font-size: 11px;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* ── DETAIL PANEL ────────────────────────────────────── */
+  /* ── DETAIL EMPTY ────────────────────────────────────── */
   .detail-empty {
     flex: 1;
     display: flex;
@@ -428,9 +456,8 @@
     opacity: 0.3;
   }
 
-  .detail-section {
-    border-bottom: 1px solid var(--border);
-  }
+  /* ── DETAIL SECTIONS ─────────────────────────────────── */
+  .detail-section { border-bottom: 1px solid var(--border); }
 
   .detail-section-head {
     padding: 6px 14px;
@@ -449,9 +476,7 @@
 
   .detail-section-head:hover { color: var(--text); }
 
-  .detail-section-body {
-    padding: 10px 14px;
-  }
+  .detail-section-body { padding: 10px 14px; }
 
   .detail-hero {
     padding: 14px;
@@ -482,9 +507,10 @@
     margin-top: 6px;
     font-size: 10px;
     color: var(--text-dim);
+    flex-wrap: wrap;
   }
 
-  /* key-value table */
+  /* ── KV TABLE ────────────────────────────────────────── */
   .kv-table {
     width: 100%;
     border-collapse: collapse;
@@ -515,6 +541,7 @@
     font-size: 10px;
   }
 
+  /* ── CODE BLOCK ──────────────────────────────────────── */
   .code-block {
     background: var(--surface3);
     border: 1px solid var(--border2);
@@ -533,10 +560,10 @@
   .code-block::-webkit-scrollbar-track { background: transparent; }
   .code-block::-webkit-scrollbar-thumb { background: var(--border2); }
 
-  /* syntax colors */
-  .jk { color: var(--cyan); }
-  .jv-str { color: var(--green); }
-  .jv-num { color: var(--amber); }
+  /* ── SYNTAX HIGHLIGHT ────────────────────────────────── */
+  .jk      { color: var(--cyan); }
+  .jv-str  { color: var(--green); }
+  .jv-num  { color: var(--amber); }
   .jv-bool { color: var(--purple); }
   .jv-null { color: var(--text-dim); }
 
@@ -598,43 +625,6 @@
     font-size: 10px;
   }
 
-  /* ── MISC ────────────────────────────────────────────── */
-  .badge-live {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--green);
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
-  .badge-live-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: pulse 2s ease infinite;
-  }
-
-  .token-count-chip {
-    font-size: 10px;
-    color: var(--text-dim);
-  }
-
-  .divider {
-    width: 1px;
-    height: 16px;
-    background: var(--border2);
-  }
-
-  .detail-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
   /* ── TOAST ───────────────────────────────────────────── */
   .toast {
     position: fixed;
@@ -665,7 +655,6 @@
 
 <div class="app">
 
-  <!-- HEADER -->
   <header>
     <div class="logo">
       <div class="logo-icon">⬡</div>
@@ -681,18 +670,16 @@
     </div>
   </header>
 
-  <!-- MAIN -->
   <main>
-
-    <!-- TOKENS -->
-    <div class="panel" id="token-panel">
+    <!-- LEFT: master panel -->
+    <div class="master-panel">
       <div class="panel-header">
-        <span>Tokens <span class="token-count-chip" id="token-count">0</span></span>
+        Tokens <span class="token-count-chip" id="token-count">0</span>
         <div class="panel-header-right">
           <button class="btn-icon" id="create-token-btn" title="New token">+</button>
         </div>
       </div>
-      <div class="panel-body" id="token-list">
+      <div class="master-body" id="master-body">
         <div class="detail-empty">
           <div class="detail-empty-icon">◈</div>
           <span>loading…</span>
@@ -700,33 +687,9 @@
       </div>
     </div>
 
-    <!-- REQUEST FEED -->
-    <div class="panel" id="feed-panel">
-      <div class="panel-header">
-        <span id="feed-title">Select a token</span>
-        <div class="panel-header-right">
-          <div class="badge-live" id="live-indicator" style="display:none">
-            <div class="badge-live-dot"></div>
-            LIVE
-          </div>
-        </div>
-      </div>
-      <div class="url-bar" id="url-bar" style="display:none">
-        <span class="url-bar-text" id="url-bar-text"></span>
-        <button class="btn-icon" id="copy-url-btn" title="Copy URL">⎘</button>
-        <button class="btn-sm danger" id="clear-req-btn">clear</button>
-      </div>
-      <div class="panel-body" id="request-feed">
-        <div class="detail-empty">
-          <div class="detail-empty-icon">◈</div>
-          <span>select a token to view requests</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- DETAIL -->
-    <div class="panel detail-panel" id="detail-panel">
-      <div class="panel-header">
+    <!-- RIGHT: detail panel -->
+    <div class="detail-col">
+      <div class="panel-header" id="detail-header">
         Request Detail
       </div>
       <div class="panel-body" id="detail-body">
@@ -736,25 +699,27 @@
         </div>
       </div>
     </div>
-
   </main>
 
-  <!-- FOOTER: global vars -->
   <footer>
     <span class="footer-label">Global Vars</span>
-    <div id="vars-strip">
-      <span class="empty-vars">no global vars</span>
-    </div>
+    <div id="vars-strip"><span class="empty-vars">no global vars</span></div>
   </footer>
 
 </div>
 
+<!-- hidden elements for JS compatibility -->
+<span id="feed-title" style="display:none"></span>
+<div id="live-indicator" style="display:none"></div>
+<div id="url-bar" style="display:none"><span id="url-bar-text"></span></div>
+<button id="copy-url-btn" style="display:none"></button>
+<button id="clear-req-btn" style="display:none"></button>
 <div id="toast" class="toast"></div>
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────
-var BASE    = window.location.origin;
-var WS_URL  = BASE.replace(/^http/, 'ws') + '/graphql';
+var BASE   = window.location.origin;
+var WS_URL = BASE.replace(/^http/, 'ws') + '/graphql';
 
 // ── STATE ─────────────────────────────────────────────────────────
 var tokens          = [];
@@ -762,6 +727,7 @@ var requestsMap     = {}; // tokenId -> [Request]
 var globalVars      = [];
 var selectedToken   = null;
 var selectedRequest = null;
+var expandedTokens  = {}; // tokenId -> bool
 
 // ── WEBSOCKET ─────────────────────────────────────────────────────
 var ws        = null;
@@ -826,7 +792,6 @@ function syntaxHighlight(json) {
     .replace(/ {2}/g, '&nbsp;&nbsp;');
 }
 
-// Normalize a request from either REST (snake_case) or GraphQL (camelCase)
 function normalizeReq(r) {
   return {
     id:         r.id,
@@ -845,8 +810,6 @@ function normalizeReq(r) {
   };
 }
 
-// Returns {label, soon} for a token's expires_at field.
-// soon = true when less than 2 hours remain.
 function ttlLabel(expiresAt) {
   if (!expiresAt) return null;
   var ms = new Date(expiresAt) - Date.now();
@@ -892,6 +855,7 @@ function loadTokens() {
 function createToken() {
   apiFetch('POST', '/api/tokens', {}).then(function(t) {
     tokens.unshift(t);
+    expandedTokens[t.id] = true;
     updateTokenSummary();
     renderTokenList();
     selectToken(t);
@@ -904,15 +868,13 @@ function createToken() {
 function deleteToken(tokenId) {
   apiFetch('DELETE', '/api/tokens/' + tokenId).then(function() {
     tokens = tokens.filter(function(t) { return t.id !== tokenId; });
+    delete expandedTokens[tokenId];
     if (selectedToken && selectedToken.id === tokenId) {
       selectedToken   = null;
       selectedRequest = null;
       wsUnsubscribe();
-      renderFeedEmpty();
       renderDetailEmpty();
-      document.getElementById('url-bar').style.display = 'none';
-      document.getElementById('feed-title').textContent = 'Select a token';
-      document.getElementById('live-indicator').style.display = 'none';
+      document.getElementById('detail-header').textContent = 'Request Detail';
     }
     updateTokenSummary();
     renderTokenList();
@@ -927,10 +889,8 @@ function loadRequests(token) {
   return apiFetch('GET', '/api/tokens/' + token.id + '/requests?per_page=200&sorting=newest').then(function(data) {
     var reqs = (data.data || []).map(normalizeReq);
     requestsMap[token.id] = reqs;
-    // Sync request count on the token object
     var t = findToken(token.id);
     if (t) t.request_count = data.total || reqs.length;
-    renderFeed(token);
     renderTokenList();
   }).catch(function(err) {
     console.error('loadRequests:', err);
@@ -942,11 +902,11 @@ function clearRequests(token) {
     requestsMap[token.id] = [];
     var t = findToken(token.id);
     if (t) t.request_count = 0;
-    renderFeed(token);
     renderTokenList();
     if (selectedRequest && selectedRequest.token_id === token.id) {
       selectedRequest = null;
       renderDetailEmpty();
+      document.getElementById('detail-header').textContent = 'Request Detail';
     }
   }).catch(function(err) {
     console.error('clearRequests:', err);
@@ -983,13 +943,13 @@ function updateTokenSummary() {
   document.getElementById('token-count').textContent = tokens.length;
 }
 
-// ── RENDER: TOKEN LIST ─────────────────────────────────────────────
+// ── RENDER: MASTER LIST ────────────────────────────────────────────
 function renderTokenList() {
-  var list = document.getElementById('token-list');
-  list.innerHTML = '';
+  var body = document.getElementById('master-body');
+  body.innerHTML = '';
 
   if (tokens.length === 0) {
-    list.innerHTML =
+    body.innerHTML =
       '<div class="detail-empty">' +
       '<div class="detail-empty-icon">◈</div>' +
       '<span>no tokens — click + to create one</span>' +
@@ -998,107 +958,116 @@ function renderTokenList() {
   }
 
   tokens.forEach(function(t) {
-    var div = document.createElement('div');
-    div.className = 'token-item' + (selectedToken && selectedToken.id === t.id ? ' active' : '');
-    div.setAttribute('data-id', t.id);
-
-    var tagHtml = '';
-    if (t.agent_id) {
-      tagHtml += '<span class="tag tag-agent">' + esc(t.agent_id) + '</span>';
-    } else {
-      tagHtml += '<span class="tag tag-anon">anon</span>';
-    }
-    if (t.script) {
-      tagHtml += ' <span class="tag tag-script">script</span>';
-    }
-
-    var count = t.request_count || 0;
-    var ttl = ttlLabel(t.expires_at);
-    var ttlHtml = ttl
-      ? ' <span class="ttl-label' + (ttl.soon ? ' expiring-soon' : '') + '">' + esc(ttl.label) + '</span>'
-      : '';
-
-    div.innerHTML =
-      '<div class="token-item-main">' +
-        '<div class="token-id">' + esc(shortId(t.id)) + '</div>' +
-        '<div class="token-meta">' +
-          tagHtml +
-          '<span class="req-count">' + count + ' req' + (count !== 1 ? 's' : '') + '</span>' +
-          ttlHtml +
-        '</div>' +
-      '</div>' +
-      '<button class="token-del-btn" data-id="' + esc(t.id) + '" title="Delete token">×</button>';
-
-    div.addEventListener('click', function(e) {
-      if (e.target.classList.contains('token-del-btn')) return;
-      selectToken(t);
-    });
-
-    var delBtn = div.querySelector('.token-del-btn');
-    delBtn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      deleteToken(t.id);
-    });
-
-    list.appendChild(div);
+    body.appendChild(buildTokenGroup(t));
   });
 }
 
-// ── RENDER: REQUEST FEED ───────────────────────────────────────────
-function renderFeed(token) {
-  var feed   = document.getElementById('request-feed');
-  var title  = document.getElementById('feed-title');
-  var live   = document.getElementById('live-indicator');
-  var urlBar = document.getElementById('url-bar');
-  var urlTxt = document.getElementById('url-bar-text');
+function buildTokenGroup(t) {
+  var isExpanded = !!expandedTokens[t.id];
+  var isActive   = selectedToken && selectedToken.id === t.id;
 
-  title.textContent = shortId(token.id);
-  live.style.display = 'flex';
-  urlBar.style.display = 'flex';
-  urlTxt.textContent = token.url || (BASE + '/' + token.id);
+  var group = document.createElement('div');
+  group.className = 'token-group' + (isExpanded ? ' expanded' : '');
+  group.setAttribute('data-id', t.id);
 
-  var reqs = requestsMap[token.id] || [];
-  feed.innerHTML = '';
-
-  if (reqs.length === 0) {
-    feed.innerHTML =
-      '<div class="detail-empty">' +
-      '<div class="detail-empty-icon">◈</div>' +
-      '<span>no requests yet</span>' +
-      '</div>';
-    return;
+  // Build tag html
+  var tagHtml = '';
+  if (t.agent_id) {
+    tagHtml += '<span class="tag tag-agent">' + esc(t.agent_id) + '</span>';
+  } else {
+    tagHtml += '<span class="tag tag-anon">anon</span>';
+  }
+  if (t.script) {
+    tagHtml += '<span class="tag tag-script">script</span>';
   }
 
-  reqs.forEach(function(r) {
-    feed.appendChild(buildReqRow(r));
+  var count = t.request_count || 0;
+  var ttl   = ttlLabel(t.expires_at);
+  var ttlHtml = ttl
+    ? '<span class="ttl-label' + (ttl.soon ? ' expiring-soon' : '') + '">' + esc(ttl.label) + '</span>'
+    : '';
+
+  var arrow = isExpanded ? '▾' : '▸';
+
+  // Header
+  var header = document.createElement('div');
+  header.className = 'tg-header' + (isActive ? ' active' : '');
+  header.innerHTML =
+    '<span class="tg-arrow">' + arrow + '</span>' +
+    '<div class="tg-main">' +
+      '<div class="tg-id">' + esc(shortId(t.id)) + '</div>' +
+      '<div class="tg-meta">' +
+        tagHtml +
+        '<span>' + count + ' req' + (count !== 1 ? 's' : '') + '</span>' +
+        ttlHtml +
+      '</div>' +
+    '</div>' +
+    '<button class="tg-del-btn" title="Delete token">×</button>';
+
+  header.addEventListener('click', function(e) {
+    if (e.target.classList.contains('tg-del-btn')) return;
+    // If clicking the already-selected token header, just toggle expand
+    if (selectedToken && selectedToken.id === t.id) {
+      toggleExpand(t);
+    } else {
+      selectToken(t);
+    }
   });
+
+  var delBtn = header.querySelector('.tg-del-btn');
+  delBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    deleteToken(t.id);
+  });
+
+  group.appendChild(header);
+
+  // Requests container
+  var reqsEl = document.createElement('div');
+  reqsEl.className = 'tg-requests';
+
+  if (isExpanded) {
+    var reqs = requestsMap[t.id];
+    if (!reqs) {
+      reqsEl.innerHTML =
+        '<div class="detail-empty" style="padding:16px 20px">' +
+        '<span>loading…</span>' +
+        '</div>';
+    } else if (reqs.length === 0) {
+      reqsEl.innerHTML =
+        '<div class="detail-empty" style="padding:16px 20px">' +
+        '<span>no requests yet</span>' +
+        '</div>';
+    } else {
+      reqs.forEach(function(r) {
+        reqsEl.appendChild(buildNestedReqRow(r));
+      });
+    }
+  }
+
+  group.appendChild(reqsEl);
+  return group;
 }
 
-function renderFeedEmpty() {
-  var feed = document.getElementById('request-feed');
-  feed.innerHTML =
-    '<div class="detail-empty">' +
-    '<div class="detail-empty-icon">◈</div>' +
-    '<span>select a token to view requests</span>' +
-    '</div>';
-}
-
-function buildReqRow(r) {
-  var div = document.createElement('div');
-  div.className = 'req-row' + (selectedRequest && selectedRequest.id === r.id ? ' active' : '');
-  div.setAttribute('data-id', r.id);
+function buildNestedReqRow(r) {
+  var row = document.createElement('div');
+  var isActive = selectedRequest && selectedRequest.id === r.id;
+  row.className = 'nr-row' + (isActive ? ' active' : '');
+  row.setAttribute('data-req-id', r.id);
 
   var displayPath = r.path || '/';
 
-  div.innerHTML =
-    '<span class="req-time">' + esc(formatTime(r.created_at)) + '</span>' +
+  row.innerHTML =
+    '<span class="nr-time">' + esc(formatTime(r.created_at)) + '</span>' +
     '<span class="method-badge ' + methodClass(r.method) + '">' + esc(r.method) + '</span>' +
-    '<span class="req-path">' + esc(displayPath) + '</span>';
+    '<span class="nr-path">' + esc(displayPath) + '</span>' +
+    (isActive ? '<span class="nr-dot"></span>' : '<span></span>');
 
-  div.addEventListener('click', function() {
+  row.addEventListener('click', function() {
     selectRequest(r);
   });
-  return div;
+
+  return row;
 }
 
 // ── RENDER: DETAIL ────────────────────────────────────────────────
@@ -1106,7 +1075,9 @@ function renderDetail(r) {
   var body = document.getElementById('detail-body');
   body.innerHTML = '';
 
-  // Hero
+  document.getElementById('detail-header').textContent =
+    (r.method || 'REQ') + ' ' + (r.path || '/');
+
   var hero = document.createElement('div');
   hero.className = 'detail-hero';
   hero.innerHTML =
@@ -1117,23 +1088,20 @@ function renderDetail(r) {
     '<div class="detail-meta-row">' +
       '<span>' + esc(formatTime(r.created_at)) + '</span>' +
       (r.ip ? '<span>' + esc(r.ip) + '</span>' : '') +
-      (r.user_agent ? '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">' + esc(r.user_agent) + '</span>' : '') +
+      (r.user_agent ? '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px">' + esc(r.user_agent) + '</span>' : '') +
     '</div>';
   body.appendChild(hero);
 
-  // Headers
   var hdrs = parseJsonObj(r.headers);
   if (hdrs && Object.keys(hdrs).length > 0) {
     body.appendChild(buildSection('Headers', buildKV(hdrs)));
   }
 
-  // Query params
   var qry = parseJsonObj(r.query);
   if (qry && Object.keys(qry).length > 0) {
     body.appendChild(buildSection('Query', buildKV(qry)));
   }
 
-  // Body
   var bodyHtml;
   if (r.body && r.body.trim()) {
     var pretty = prettyJson(r.body);
@@ -1143,7 +1111,6 @@ function renderDetail(r) {
   }
   body.appendChild(buildSection('Body', bodyHtml));
 
-  // Form data
   var formData = parseJsonObj(r.form_data);
   if (formData && Object.keys(formData).length > 0) {
     body.appendChild(buildSection('Form Data', buildKV(formData)));
@@ -1162,7 +1129,8 @@ function renderTokenConfig(token) {
   var body = document.getElementById('detail-body');
   body.innerHTML = '';
 
-  // Hero
+  document.getElementById('detail-header').textContent = 'TOKEN ' + shortId(token.id);
+
   var hero = document.createElement('div');
   hero.className = 'detail-hero';
   hero.innerHTML =
@@ -1176,14 +1144,12 @@ function renderTokenConfig(token) {
     '</div>';
   body.appendChild(hero);
 
-  // Response body
   var content = token.default_content || '';
   var contentHtml = content
     ? buildCodeBlock(prettyJson(content) || esc(content))
     : '<span style="color:var(--text-muted);font-size:10px;font-style:italic">empty</span>';
   body.appendChild(buildSection('Response Body', contentHtml));
 
-  // Script
   if (token.script) {
     body.appendChild(buildSection('Script', buildCodeBlock(esc(token.script))));
   }
@@ -1250,42 +1216,35 @@ function renderVars() {
 function selectToken(token) {
   selectedToken   = token;
   selectedRequest = null;
-  renderTokenList();
+  expandedTokens[token.id] = true;
+
   renderTokenConfig(token);
 
-  // Show URL bar
-  document.getElementById('url-bar').style.display = 'flex';
-  document.getElementById('url-bar-text').textContent = token.url || (BASE + '/' + token.id);
-
-  // Show feed header
-  document.getElementById('feed-title').textContent = shortId(token.id);
-  document.getElementById('live-indicator').style.display = 'flex';
-
-  // Load requests (render inside)
   if (requestsMap[token.id]) {
-    renderFeed(token);
+    renderTokenList();
   } else {
-    document.getElementById('request-feed').innerHTML =
-      '<div class="detail-empty"><div class="detail-empty-icon">◈</div><span>loading…</span></div>';
+    renderTokenList();
     loadRequests(token);
   }
 
-  // Subscribe to this token
   wsSubscribe(token.id);
+}
+
+function toggleExpand(token) {
+  var wasExpanded = !!expandedTokens[token.id];
+  expandedTokens[token.id] = !wasExpanded;
+
+  if (!wasExpanded && !requestsMap[token.id]) {
+    loadRequests(token);
+  } else {
+    renderTokenList();
+  }
 }
 
 function selectRequest(req) {
   selectedRequest = req;
-  // Update active row
-  var rows = document.querySelectorAll('.req-row');
-  rows.forEach(function(row) {
-    if (row.getAttribute('data-id') === req.id) {
-      row.classList.add('active');
-    } else {
-      row.classList.remove('active');
-    }
-  });
   renderDetail(req);
+  renderTokenList();
 }
 
 // ── WEBSOCKET ─────────────────────────────────────────────────────
@@ -1369,29 +1328,25 @@ function wsUnsubscribe() {
 }
 
 function wsHandleRequestReceived(event) {
-  var raw    = event.request;
-  var req    = normalizeReq(raw);
+  var raw     = event.request;
+  var req     = normalizeReq(raw);
   var tokenId = req.token_id;
 
   if (!requestsMap[tokenId]) requestsMap[tokenId] = [];
   requestsMap[tokenId].unshift(req);
 
-  // Update token request count
   var t = findToken(tokenId);
   if (t) t.request_count = event.total;
 
   updateTokenSummary();
   renderTokenList();
 
-  // Update feed if this is the selected token
-  if (selectedToken && selectedToken.id === tokenId) {
-    var feed  = document.getElementById('request-feed');
-    var empty = feed.querySelector('.detail-empty');
-    if (empty) feed.innerHTML = '';
-
-    var row = buildReqRow(req);
-    row.classList.add('new-flash');
-    feed.insertBefore(row, feed.firstChild);
+  // Flash the newly inserted row if the token is expanded
+  if (expandedTokens[tokenId]) {
+    var newRow = document.querySelector('.nr-row[data-req-id="' + req.id + '"]');
+    if (newRow) {
+      newRow.classList.add('new-flash');
+    }
   }
 }
 

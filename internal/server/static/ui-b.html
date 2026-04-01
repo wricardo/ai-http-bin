@@ -35,7 +35,6 @@
     --header-h:  48px;
     --footer-h:  44px;
     --token-w:   220px;
-    --detail-w:  380px;
   }
 
   html, body {
@@ -130,7 +129,7 @@
   /* ── MAIN ────────────────────────────────────────────── */
   main {
     display: grid;
-    grid-template-columns: var(--token-w) 1fr var(--detail-w);
+    grid-template-columns: var(--token-w) 1fr;
     overflow: hidden;
   }
 
@@ -176,6 +175,12 @@
   .panel-body::-webkit-scrollbar { width: 4px; }
   .panel-body::-webkit-scrollbar-track { background: transparent; }
   .panel-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── FEED PANEL (right side, needs position:relative) ── */
+  .feed-panel {
+    position: relative;
+    overflow: hidden;
+  }
 
   /* ── BUTTONS ─────────────────────────────────────────── */
   .btn-icon {
@@ -307,9 +312,9 @@
     text-transform: uppercase;
   }
 
-  .tag-agent { background: var(--blue-dim); color: var(--blue); }
+  .tag-agent  { background: var(--blue-dim);   color: var(--blue); }
   .tag-script { background: var(--purple-dim); color: var(--purple); }
-  .tag-anon { background: var(--surface3); color: var(--text-dim); }
+  .tag-anon   { background: var(--surface3);   color: var(--text-dim); }
 
   .req-count {
     font-size: 10px;
@@ -324,9 +329,7 @@
     white-space: nowrap;
   }
 
-  .ttl-label.expiring-soon {
-    color: var(--amber);
-  }
+  .ttl-label.expiring-soon { color: var(--amber); }
 
   /* ── URL BAR ─────────────────────────────────────────── */
   .url-bar {
@@ -374,8 +377,8 @@
   }
 
   @keyframes flash {
-    0%  { background: rgba(37, 99, 235, 0.09); }
-    100%{ background: transparent; }
+    0%   { background: rgba(37, 99, 235, 0.09); }
+    100% { background: transparent; }
   }
 
   .req-time {
@@ -408,7 +411,82 @@
     text-overflow: ellipsis;
   }
 
-  /* ── DETAIL PANEL ────────────────────────────────────── */
+  /* ── DETAIL OVERLAY ──────────────────────────────────── */
+  .detail-overlay {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 370px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.07);
+    transform: translateX(100%);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+  }
+
+  .detail-overlay.open { transform: translateX(0); }
+
+  .overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    height: 40px;
+    min-height: 40px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+
+  .overlay-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .overlay-method {
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .overlay-path {
+    font-size: 13px;
+    color: var(--text-dim);
+    word-break: break-all;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .overlay-meta {
+    padding: 5px 14px;
+    font-size: 10px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .overlay-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .overlay-body::-webkit-scrollbar { width: 4px; }
+  .overlay-body::-webkit-scrollbar-track { background: transparent; }
+  .overlay-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── DETAIL SECTIONS ─────────────────────────────────── */
   .detail-empty {
     flex: 1;
     display: flex;
@@ -453,37 +531,6 @@
     padding: 10px 14px;
   }
 
-  .detail-hero {
-    padding: 14px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
-
-  .detail-method-path {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-  }
-
-  .detail-method {
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .detail-path {
-    font-size: 13px;
-    color: var(--text);
-    word-break: break-all;
-  }
-
-  .detail-meta-row {
-    display: flex;
-    gap: 16px;
-    margin-top: 6px;
-    font-size: 10px;
-    color: var(--text-dim);
-  }
-
   /* key-value table */
   .kv-table {
     width: 100%;
@@ -504,8 +551,8 @@
     padding-right: 12px;
     white-space: nowrap;
     font-size: 10px;
-    min-width: 120px;
-    max-width: 140px;
+    min-width: 100px;
+    max-width: 120px;
     word-break: break-all;
   }
 
@@ -534,9 +581,9 @@
   .code-block::-webkit-scrollbar-thumb { background: var(--border2); }
 
   /* syntax colors */
-  .jk { color: var(--cyan); }
-  .jv-str { color: var(--green); }
-  .jv-num { color: var(--amber); }
+  .jk      { color: var(--cyan); }
+  .jv-str  { color: var(--green); }
+  .jv-num  { color: var(--amber); }
   .jv-bool { color: var(--purple); }
   .jv-null { color: var(--text-dim); }
 
@@ -629,12 +676,6 @@
     background: var(--border2);
   }
 
-  .detail-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
   /* ── TOAST ───────────────────────────────────────────── */
   .toast {
     position: fixed;
@@ -684,7 +725,7 @@
   <!-- MAIN -->
   <main>
 
-    <!-- TOKENS -->
+    <!-- TOKEN PANEL (left, 220px) -->
     <div class="panel" id="token-panel">
       <div class="panel-header">
         <span>Tokens <span class="token-count-chip" id="token-count">0</span></span>
@@ -700,8 +741,8 @@
       </div>
     </div>
 
-    <!-- REQUEST FEED -->
-    <div class="panel" id="feed-panel">
+    <!-- FEED PANEL (right, flex) — position:relative for overlay -->
+    <div class="panel feed-panel" id="feed-panel">
       <div class="panel-header">
         <span id="feed-title">Select a token</span>
         <div class="panel-header-right">
@@ -722,18 +763,18 @@
           <span>select a token to view requests</span>
         </div>
       </div>
-    </div>
 
-    <!-- DETAIL -->
-    <div class="panel detail-panel" id="detail-panel">
-      <div class="panel-header">
-        Request Detail
-      </div>
-      <div class="panel-body" id="detail-body">
-        <div class="detail-empty">
-          <div class="detail-empty-icon">◉</div>
-          <span>select a request to inspect</span>
+      <!-- DETAIL OVERLAY (slides in from right, position:absolute) -->
+      <div class="detail-overlay" id="detail-overlay">
+        <div class="overlay-header">
+          <div class="overlay-title" id="overlay-title">
+            <span id="overlay-method" class="overlay-method"></span>
+            <span id="overlay-path" class="overlay-path"></span>
+          </div>
+          <button class="btn-icon" id="close-overlay-btn" title="Close">×</button>
         </div>
+        <div class="overlay-meta" id="overlay-meta"></div>
+        <div class="overlay-body" id="detail-body"></div>
       </div>
     </div>
 
@@ -753,8 +794,8 @@
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────
-var BASE    = window.location.origin;
-var WS_URL  = BASE.replace(/^http/, 'ws') + '/graphql';
+var BASE   = window.location.origin;
+var WS_URL = BASE.replace(/^http/, 'ws') + '/graphql';
 
 // ── STATE ─────────────────────────────────────────────────────────
 var tokens          = [];
@@ -1013,7 +1054,7 @@ function renderTokenList() {
     }
 
     var count = t.request_count || 0;
-    var ttl = ttlLabel(t.expires_at);
+    var ttl   = ttlLabel(t.expires_at);
     var ttlHtml = ttl
       ? ' <span class="ttl-label' + (ttl.soon ? ' expiring-soon' : '') + '">' + esc(ttl.label) + '</span>'
       : '';
@@ -1101,25 +1142,32 @@ function buildReqRow(r) {
   return div;
 }
 
-// ── RENDER: DETAIL ────────────────────────────────────────────────
+// ── RENDER: DETAIL OVERLAY ────────────────────────────────────────
 function renderDetail(r) {
+  // Open the overlay
+  document.getElementById('detail-overlay').classList.add('open');
+
+  // Update overlay header: method + path
+  var methodEl = document.getElementById('overlay-method');
+  methodEl.textContent = r.method || 'GET';
+  methodEl.style.color = methodColor(r.method);
+
+  document.getElementById('overlay-path').textContent = r.path || '/';
+
+  // Update overlay meta: time, IP, UA
+  var metaEl = document.getElementById('overlay-meta');
+  var metaParts = [];
+  metaParts.push('<span>' + esc(formatTime(r.created_at)) + '</span>');
+  if (r.ip) metaParts.push('<span>' + esc(r.ip) + '</span>');
+  if (r.user_agent) {
+    var ua = r.user_agent.length > 40 ? r.user_agent.substring(0, 40) + '…' : r.user_agent;
+    metaParts.push('<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(ua) + '</span>');
+  }
+  metaEl.innerHTML = metaParts.join('');
+
+  // Populate detail body — no hero needed (info is in overlay-header/meta)
   var body = document.getElementById('detail-body');
   body.innerHTML = '';
-
-  // Hero
-  var hero = document.createElement('div');
-  hero.className = 'detail-hero';
-  hero.innerHTML =
-    '<div class="detail-method-path">' +
-      '<span class="detail-method" style="color:' + methodColor(r.method) + '">' + esc(r.method) + '</span>' +
-      '<span class="detail-path">' + esc(r.path || '/') + '</span>' +
-    '</div>' +
-    '<div class="detail-meta-row">' +
-      '<span>' + esc(formatTime(r.created_at)) + '</span>' +
-      (r.ip ? '<span>' + esc(r.ip) + '</span>' : '') +
-      (r.user_agent ? '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">' + esc(r.user_agent) + '</span>' : '') +
-    '</div>';
-  body.appendChild(hero);
 
   // Headers
   var hdrs = parseJsonObj(r.headers);
@@ -1148,45 +1196,30 @@ function renderDetail(r) {
   if (formData && Object.keys(formData).length > 0) {
     body.appendChild(buildSection('Form Data', buildKV(formData)));
   }
+
+  // Update active class on req-row
+  var rows = document.querySelectorAll('.req-row');
+  rows.forEach(function(row) {
+    if (row.getAttribute('data-id') === r.id) {
+      row.classList.add('active');
+    } else {
+      row.classList.remove('active');
+    }
+  });
 }
 
 function renderDetailEmpty() {
-  document.getElementById('detail-body').innerHTML =
-    '<div class="detail-empty">' +
-    '<div class="detail-empty-icon">◉</div>' +
-    '<span>select a request to inspect</span>' +
-    '</div>';
+  // Close overlay
+  document.getElementById('detail-overlay').classList.remove('open');
+  selectedRequest = null;
+  // Remove active class from all req-rows
+  var rows = document.querySelectorAll('.req-row');
+  rows.forEach(function(row) { row.classList.remove('active'); });
 }
 
 function renderTokenConfig(token) {
-  var body = document.getElementById('detail-body');
-  body.innerHTML = '';
-
-  // Hero
-  var hero = document.createElement('div');
-  hero.className = 'detail-hero';
-  hero.innerHTML =
-    '<div class="detail-method-path">' +
-      '<span class="detail-method" style="color:var(--text-dim)">TOKEN</span>' +
-      '<span class="detail-path">' + esc(shortId(token.id)) + '</span>' +
-    '</div>' +
-    '<div class="detail-meta-row">' +
-      '<span>status <span style="color:var(--green)">' + (token.default_status || 200) + '</span></span>' +
-      '<span style="color:var(--text-dim)">' + esc(token.default_content_type || 'text/plain') + '</span>' +
-    '</div>';
-  body.appendChild(hero);
-
-  // Response body
-  var content = token.default_content || '';
-  var contentHtml = content
-    ? buildCodeBlock(prettyJson(content) || esc(content))
-    : '<span style="color:var(--text-muted);font-size:10px;font-style:italic">empty</span>';
-  body.appendChild(buildSection('Response Body', contentHtml));
-
-  // Script
-  if (token.script) {
-    body.appendChild(buildSection('Script', buildCodeBlock(esc(token.script))));
-  }
+  // No detail panel in this layout; keep overlay closed
+  renderDetailEmpty();
 }
 
 function parseJsonObj(str) {
@@ -1202,7 +1235,7 @@ function buildSection(title, contentHtml) {
   head.className = 'detail-section-head';
   head.innerHTML = esc(title) + '<span style="font-size:9px;color:var(--text-muted)">▾</span>';
 
-  var bdy  = document.createElement('div');
+  var bdy = document.createElement('div');
   bdy.className = 'detail-section-body';
   bdy.innerHTML = contentHtml;
 
@@ -1251,7 +1284,7 @@ function selectToken(token) {
   selectedToken   = token;
   selectedRequest = null;
   renderTokenList();
-  renderTokenConfig(token);
+  renderDetailEmpty(); // close any open overlay
 
   // Show URL bar
   document.getElementById('url-bar').style.display = 'flex';
@@ -1276,15 +1309,6 @@ function selectToken(token) {
 
 function selectRequest(req) {
   selectedRequest = req;
-  // Update active row
-  var rows = document.querySelectorAll('.req-row');
-  rows.forEach(function(row) {
-    if (row.getAttribute('data-id') === req.id) {
-      row.classList.add('active');
-    } else {
-      row.classList.remove('active');
-    }
-  });
   renderDetail(req);
 }
 
@@ -1369,8 +1393,8 @@ function wsUnsubscribe() {
 }
 
 function wsHandleRequestReceived(event) {
-  var raw    = event.request;
-  var req    = normalizeReq(raw);
+  var raw     = event.request;
+  var req     = normalizeReq(raw);
   var tokenId = req.token_id;
 
   if (!requestsMap[tokenId]) requestsMap[tokenId] = [];
@@ -1452,6 +1476,10 @@ document.getElementById('copy-url-btn').addEventListener('click', function() {
 
 document.getElementById('clear-req-btn').addEventListener('click', function() {
   if (selectedToken) clearRequests(selectedToken);
+});
+
+document.getElementById('close-overlay-btn').addEventListener('click', function() {
+  renderDetailEmpty();
 });
 
 // ── INIT ──────────────────────────────────────────────────────────

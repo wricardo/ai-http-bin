@@ -67,9 +67,9 @@ func New(baseURL string, opts ...Option) *http.Server {
 		c.Next()
 	})
 
-	// Spec homepage — markdown readable by AI agents
+	// Homepage serves LLM instructions; /llms.txt is a canonical alias.
 	r.GET("/", func(c *gin.Context) {
-		c.Data(http.StatusOK, "text/markdown; charset=utf-8", []byte(specMarkdown(baseURL)))
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(llmsTxt(baseURL)))
 	})
 	r.GET("/llms.txt", func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(llmsTxt(baseURL)))
