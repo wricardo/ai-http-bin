@@ -16,26 +16,22 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/wricardo/ai-http-bin/internal/server"
+	"github.com/wricardo/ai-http-bin/pkg/sdk"
 )
 
 // --- REQ-004, REQ-005: token captures creator IP and User-Agent ---
 
+// TestTokenCapturesCreatorIPAndUserAgent tests token creation API (REQ-004, REQ-005).
+// Scenario: Create token, inspect token.IP and token.UserAgent fields.
+// Expects: Both fields are non-empty (client IP and User-Agent captured).
 func TestTokenCapturesCreatorIPAndUserAgent(t *testing.T) {
-	type tokenData struct {
-		CreateToken struct {
-			ID        string `json:"id"`
-			IP        string `json:"ip"`
-			UserAgent string `json:"userAgent"`
-		} `json:"createToken"`
+	tok, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
 	}
-
-	result := doGQL[tokenData](t, `
-		mutation {
-			createToken { id ip userAgent }
-		}
-	`, nil)
-
-	tok := result.CreateToken
+	if tok == nil {
+		t.Fatal("CreateToken returned nil")
+	}
 	if tok.IP == "" {
 		t.Error("expected non-empty ip on created token")
 	}
@@ -45,43 +41,33 @@ func TestTokenCapturesCreatorIPAndUserAgent(t *testing.T) {
 
 // --- REQ-008: token.requests field returns associated requests ---
 
+// TestTokenRequestsField tests the token.requests nested field (REQ-008).
+// Scenario: Create token, send 2 webhooks, query token with nested requests field.
+// Expects: token.requests contains 2 request objects with id, method, body fields.
 func TestTokenRequestsField(t *testing.T) {
 	token := createToken(t)
 	sendWebhook(t, token.URL, http.MethodPost, `{"a":1}`, "application/json")
 	sendWebhook(t, token.URL, http.MethodPost, `{"a":2}`, "application/json")
 
-	type tokenData struct {
-		Token struct {
-			ID       string    `json:"id"`
-			Requests []Request `json:"requests"`
-		} `json:"token"`
-	}
-
-	result := doGQL[tokenData](t, `
-		query($id: ID!) {
-			token(id: $id) {
-				id
-				requests { id method body }
-			}
-		}
-	`, map[string]any{"id": token.ID})
-
-	if len(result.Token.Requests) != 2 {
-		t.Errorf("expected 2 requests on token, got %d", len(result.Token.Requests))
+	reqs := tokenRequestsField(t, token.ID)
+	if len(reqs) != 2 {
+		t.Errorf("expected 2 requests on token, got %d", len(reqs))
 	}
 }
 
 // --- REQ-012, REQ-029: timeout delays response ---
 
+// TestWebhookTimeout tests webhook API with timeout setting (REQ-012, REQ-029).
+// Scenario: Create token with timeout=1 (1s), send webhook, measure elapsed time.
+// Expects: Response takes at least 900ms (accounting for timing variance).
 func TestWebhookTimeout(t *testing.T) {
-	type data struct {
-		CreateToken struct {
-			ID  string `json:"id"`
-			URL string `json:"url"`
-		} `json:"createToken"`
+	token, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{Timeout: ptr(1)})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
 	}
-	result := doGQL[data](t, `mutation { createToken(timeout: 1) { id url } }`, nil)
-	token := result.CreateToken
+	if token == nil {
+		t.Fatal("CreateToken returned nil")
+	}
 
 	start := time.Now()
 	resp := sendWebhook(t, token.URL, http.MethodGet, "", "")
@@ -98,6 +84,9 @@ func TestWebhookTimeout(t *testing.T) {
 
 // --- REQ-016: request URL includes query string ---
 
+// TestRequestCapturesURLWithQueryString tests request capture API (REQ-016).
+// Scenario: Create token, send GET to /:tokenID?foo=bar&n=42, retrieve request.
+// Expects: request.url contains query string "foo=bar".
 func TestRequestCapturesURLWithQueryString(t *testing.T) {
 	token := createToken(t)
 
@@ -112,6 +101,9 @@ func TestRequestCapturesURLWithQueryString(t *testing.T) {
 
 // --- REQ-017: request captures hostname ---
 
+// TestRequestCapturesHostname tests request capture API (REQ-017).
+// Scenario: Create token, send webhook, retrieve request.
+// Expects: request.hostname is non-empty.
 func TestRequestCapturesHostname(t *testing.T) {
 	token := createToken(t)
 	sendWebhook(t, token.URL, http.MethodGet, "", "")
@@ -125,6 +117,9 @@ func TestRequestCapturesHostname(t *testing.T) {
 
 // --- REQ-018: request captures path after token segment ---
 
+// TestRequestCapturesSubPath tests request capture API (REQ-018).
+// Scenario: Create token, send GET to /:tokenID/some/sub/path, retrieve request.
+// Expects: request.path equals "/some/sub/path".
 func TestRequestCapturesSubPath(t *testing.T) {
 	token := createToken(t)
 	sendWebhook(t, token.URL+"/some/sub/path", http.MethodGet, "", "")
@@ -137,6 +132,9 @@ func TestRequestCapturesSubPath(t *testing.T) {
 
 // --- REQ-019: request captures all headers as JSON ---
 
+// TestRequestCapturesHeaders tests request capture API (REQ-019).
+// Scenario: Create token, send webhook with custom header "X-Custom-Header: hello-test", retrieve request.
+// Expects: request.headers is valid JSON, contains X-Custom-Header with value "hello-test".
 func TestRequestCapturesHeaders(t *testing.T) {
 	token := createToken(t)
 
@@ -167,6 +165,9 @@ func TestRequestCapturesHeaders(t *testing.T) {
 
 // --- REQ-020: request captures query params as JSON; empty when none ---
 
+// TestRequestCapturesQueryParams tests request capture API (REQ-020).
+// Scenario: Create 2 tokens. Send one with query params (color=red&size=large), one without.
+// Expects: First request.query is valid JSON with {color: red, size: large}. Second request.query is valid JSON (empty object or {}).
 func TestRequestCapturesQueryParams(t *testing.T) {
 	token := createToken(t)
 
@@ -198,6 +199,9 @@ func TestRequestCapturesQueryParams(t *testing.T) {
 
 // --- REQ-022: request captures formData for non-JSON POST ---
 
+// TestRequestCapturesFormData tests request capture API (REQ-022).
+// Scenario: Create token, send POST with form data (username=alice&role=admin), retrieve request.
+// Expects: request.formData is valid JSON with {username: alice, role: admin}.
 func TestRequestCapturesFormData(t *testing.T) {
 	token := createToken(t)
 
@@ -210,25 +214,14 @@ func TestRequestCapturesFormData(t *testing.T) {
 		t.Fatalf("send form: %v", err)
 	}
 
-	type formRequest struct {
-		ID       string `json:"id"`
-		FormData string `json:"formData"`
+	page, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{})
+	if err != nil {
+		t.Fatalf("Requests: %v", err)
 	}
-	type pageData struct {
-		Requests struct {
-			Data []formRequest `json:"data"`
-		} `json:"requests"`
-	}
-	page := doGQL[pageData](t, `
-		query($tokenId: ID!) {
-			requests(tokenId: $tokenId) { data { id formData } }
-		}
-	`, map[string]any{"tokenId": token.ID})
-
-	if len(page.Requests.Data) == 0 {
+	if len(page.Data) == 0 {
 		t.Fatal("no requests captured")
 	}
-	raw := page.Requests.Data[0].FormData
+	raw := page.Data[0].FormData
 
 	// formData should be a JSON object with the form fields.
 	var fd map[string]string
@@ -242,6 +235,9 @@ func TestRequestCapturesFormData(t *testing.T) {
 
 // --- REQ-023, REQ-024, REQ-025: request captures IP, User-Agent, createdAt ---
 
+// TestRequestCapturesIPUserAgentCreatedAt tests request capture API (REQ-023, REQ-024, REQ-025).
+// Scenario: Create token, send POST with custom User-Agent header, retrieve request.
+// Expects: request.ip is non-empty, request.userAgent is non-empty, request.createdAt is valid ISO 8601.
 func TestRequestCapturesIPUserAgentCreatedAt(t *testing.T) {
 	token := createToken(t)
 	_, err := client().R().
@@ -274,6 +270,9 @@ func TestRequestCapturesIPUserAgentCreatedAt(t *testing.T) {
 // Requests beyond the per-token cap are accepted (200) but the oldest
 // stored request is evicted to make room. The cap is never exceeded.
 
+// TestQuotaEnforcement tests the per-token quota API (server with max 2 requests per token).
+// Scenario: Create a token, send 3 webhooks, query the stored requests.
+// Expects: All 3 webhooks return 200 (accepted), but only 2 are stored; oldest is evicted due to FIFO policy.
 func TestQuotaEnforcement(t *testing.T) {
 	// Start a dedicated server with a quota of 2.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -282,25 +281,17 @@ func TestQuotaEnforcement(t *testing.T) {
 	}
 	quotaURL := fmt.Sprintf("http://%s", ln.Addr().String())
 	srv := server.New(quotaURL, server.WithMaxRequestsPerToken(2))
-	go srv.Serve(ln) //nolint:errcheck
+	go srv.Serve(ln)                                         //nolint:errcheck
 	t.Cleanup(func() { srv.Shutdown(context.Background()) }) //nolint:errcheck
 
 	// Create a token on the quota server.
-	type data struct {
-		CreateToken struct {
-			ID  string `json:"id"`
-			URL string `json:"url"`
-		} `json:"createToken"`
-	}
-	body, _ := json.Marshal(gqlRequest{Query: `mutation { createToken { id url } }`})
-	resp, err := client().SetBaseURL(quotaURL).R().SetBody(body).Post("/graphql")
+	quotaClient := sdk.New(quotaURL)
+	tok, err := quotaClient.CreateToken(context.Background(), sdk.CreateTokenInput{})
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
-	var result gqlResponse[data]
-	json.Unmarshal(resp.Body(), &result) //nolint:errcheck
-	tokenID := result.Data.CreateToken.ID
-	tokenURL := result.Data.CreateToken.URL
+	tokenID := tok.ID
+	tokenURL := tok.URL
 
 	// Send 3 requests — all must succeed.
 	for i := range 3 {
@@ -311,22 +302,20 @@ func TestQuotaEnforcement(t *testing.T) {
 	}
 
 	// Only 2 requests must be stored (oldest was evicted).
-	listResp, err := client().SetBaseURL(quotaURL).R().
-		Get("/api/tokens/" + tokenID + "/requests")
+	page, err := quotaClient.Requests(context.Background(), tokenID, sdk.RequestsOptions{})
 	if err != nil {
 		t.Fatalf("list requests: %v", err)
 	}
-	var listResult struct {
-		Total int `json:"total"`
-	}
-	json.Unmarshal(listResp.Body(), &listResult) //nolint:errcheck
-	if listResult.Total != 2 {
-		t.Errorf("stored request count: got %d, want 2", listResult.Total)
+	if page.Total != 2 {
+		t.Errorf("stored request count: got %d, want 2", page.Total)
 	}
 }
 
 // --- REQ-031: receiver does not shadow management routes ---
 
+// TestReceiverDoesNotShadowManagementRoutes tests route shadowing (REQ-031).
+// Scenario: Try to access /health and /graphql endpoints.
+// Expects: Both return 200. /health returns ok status, /graphql accepts query.
 func TestReceiverDoesNotShadowManagementRoutes(t *testing.T) {
 	// /health must work.
 	resp, err := client().R().Get("/health")
@@ -338,8 +327,7 @@ func TestReceiverDoesNotShadowManagementRoutes(t *testing.T) {
 	}
 
 	// /graphql must accept a POST.
-	body, _ := json.Marshal(gqlRequest{Query: `query { tokens { id } }`})
-	gResp, err := client().R().SetBody(body).Post("/graphql")
+	gResp, err := client().R().SetBody(`{"query":"{ tokens { id } }"}`).Post("/graphql")
 	if err != nil {
 		t.Fatalf("/graphql: %v", err)
 	}
@@ -350,28 +338,19 @@ func TestReceiverDoesNotShadowManagementRoutes(t *testing.T) {
 
 // --- REQ-042: requests query uses sensible defaults ---
 
+// TestRequestsDefaultPagination tests Requests query API defaults (REQ-042).
+// Scenario: Create token, send 3 webhooks, query Requests without page/perPage params.
+// Expects: perPage=50, currentPage=1, isLastPage=true (3 items < 50).
 func TestRequestsDefaultPagination(t *testing.T) {
 	token := createToken(t)
 	for range 3 {
 		sendWebhook(t, token.URL, http.MethodGet, "", "")
 	}
 
-	type pageData struct {
-		Requests struct {
-			PerPage     int  `json:"perPage"`
-			CurrentPage int  `json:"currentPage"`
-			IsLastPage  bool `json:"isLastPage"`
-		} `json:"requests"`
+	p, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{})
+	if err != nil {
+		t.Fatalf("Requests: %v", err)
 	}
-
-	// Call without pagination args.
-	result := doGQL[pageData](t, `
-		query($tokenId: ID!) {
-			requests(tokenId: $tokenId) { perPage currentPage isLastPage }
-		}
-	`, map[string]any{"tokenId": token.ID})
-
-	p := result.Requests
 	if p.PerPage != 50 {
 		t.Errorf("default perPage: got %d, want 50", p.PerPage)
 	}
@@ -385,6 +364,9 @@ func TestRequestsDefaultPagination(t *testing.T) {
 
 // --- REQ-055: /playground serves HTML ---
 
+// TestPlaygroundServesHTML tests the /playground management endpoint (REQ-055).
+// Scenario: Send GET request to /playground.
+// Expects: Status 200, Content-Type contains text/html.
 func TestPlaygroundServesHTML(t *testing.T) {
 	resp, err := client().R().Get("/playground")
 	if err != nil {
@@ -401,6 +383,9 @@ func TestPlaygroundServesHTML(t *testing.T) {
 
 // --- REQ-051, REQ-052: requestReceived subscription over WebSocket ---
 
+// TestSubscriptionRequestReceived tests WebSocket subscription API (REQ-051, REQ-052).
+// Scenario: Connect WebSocket, subscribe to requestReceived for token, send webhook in parallel.
+// Expects: Subscription receives event with captured request, total, and truncated fields.
 func TestSubscriptionRequestReceived(t *testing.T) {
 	token := createToken(t)
 
@@ -458,6 +443,9 @@ func TestSubscriptionRequestReceived(t *testing.T) {
 
 // --- REQ-053: payload over 1 MB is truncated ---
 
+// TestLargePayloadTruncated tests payload truncation (REQ-053).
+// Scenario: Subscribe to requestReceived, send webhook with 1.1 MB body.
+// Expects: Subscription event has truncated=true, request.body is empty.
 func TestLargePayloadTruncated(t *testing.T) {
 	token := createToken(t)
 
@@ -498,77 +486,4 @@ func TestLargePayloadTruncated(t *testing.T) {
 	if body, _ := req["body"].(string); body != "" {
 		t.Error("expected body to be empty when truncated")
 	}
-}
-
-// --- WebSocket helpers ---
-
-func writeWS(t *testing.T, conn *websocket.Conn, v any) {
-	t.Helper()
-	b, _ := json.Marshal(v)
-	if err := conn.WriteMessage(websocket.TextMessage, b); err != nil {
-		t.Fatalf("ws write: %v", err)
-	}
-}
-
-func expectWSType(t *testing.T, conn *websocket.Conn, wantType string) {
-	t.Helper()
-	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	for {
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			t.Fatalf("ws read (expecting %s): %v", wantType, err)
-		}
-		var m map[string]any
-		json.Unmarshal(msg, &m) //nolint:errcheck
-		if m["type"] == wantType {
-			return
-		}
-	}
-}
-
-func readWSData(t *testing.T, conn *websocket.Conn) map[string]any {
-	t.Helper()
-	for {
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			t.Fatalf("ws read: %v", err)
-		}
-		var envelope struct {
-			Type    string `json:"type"`
-			Payload struct {
-				Data map[string]any `json:"data"`
-			} `json:"payload"`
-		}
-		json.Unmarshal(msg, &envelope) //nolint:errcheck
-		if envelope.Type != "data" {
-			continue
-		}
-		raw := envelope.Payload.Data["requestReceived"]
-		if raw == nil {
-			t.Fatalf("no requestReceived in data: %v", envelope.Payload.Data)
-		}
-		return raw.(map[string]any)
-	}
-}
-
-// --- shared helper ---
-
-func firstRequest(t *testing.T, tokenID string) Request {
-	t.Helper()
-	type pageData struct {
-		Requests struct {
-			Data []Request `json:"data"`
-		} `json:"requests"`
-	}
-	page := doGQL[pageData](t, `
-		query($tokenId: ID!) {
-			requests(tokenId: $tokenId) {
-				data {`+requestFields+`}
-			}
-		}
-	`, map[string]any{"tokenId": tokenID})
-	if len(page.Requests.Data) == 0 {
-		t.Fatalf("no requests found for token %s", tokenID)
-	}
-	return page.Requests.Data[0]
 }

@@ -10,12 +10,15 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-resty/resty/v2"
 	"github.com/wricardo/ai-http-bin/internal/server"
+	"github.com/wricardo/ai-http-bin/pkg/sdk"
 )
 
 // serverURL is set once in TestMain and used by all tests.
-var serverURL string
+var (
+	serverURL string
+	gqlClient *sdk.Client
+)
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
@@ -27,6 +30,7 @@ func TestMain(m *testing.M) {
 	}
 
 	serverURL = fmt.Sprintf("http://%s", ln.Addr().String())
+	gqlClient = sdk.New(serverURL)
 
 	srv := server.New(serverURL)
 	go srv.Serve(ln) //nolint:errcheck
@@ -37,134 +41,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// --- client helpers ---
-
-func client() *resty.Client {
-	return resty.New().
-		SetBaseURL(serverURL).
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Accept", "application/json")
-}
-
-type gqlRequest struct {
-	Query     string `json:"query"`
-	Variables any    `json:"variables,omitempty"`
-}
-
-type gqlResponse[T any] struct {
-	Data   T          `json:"data"`
-	Errors []gqlError `json:"errors,omitempty"`
-}
-
-type gqlError struct {
-	Message string `json:"message"`
-}
-
-func doGQL[T any](t *testing.T, query string, variables any) T {
-	t.Helper()
-
-	body, err := json.Marshal(gqlRequest{Query: query, Variables: variables})
-	if err != nil {
-		t.Fatalf("marshal gql request: %v", err)
-	}
-
-	resp, err := client().R().SetBody(body).Post("/graphql")
-	if err != nil {
-		t.Fatalf("gql request: %v", err)
-	}
-	if resp.StatusCode() != 200 {
-		t.Fatalf("unexpected status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	var result gqlResponse[T]
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if len(result.Errors) > 0 {
-		t.Fatalf("gql errors: %v", result.Errors)
-	}
-
-	return result.Data
-}
-
-// --- shared types ---
-
-type Token struct {
-	ID                 string    `json:"id"`
-	URL                string    `json:"url"`
-	CreatedAt          string    `json:"createdAt"`
-	RequestCount       int       `json:"requestCount"`
-	DefaultStatus      int       `json:"defaultStatus"`
-	DefaultContent     string    `json:"defaultContent"`
-	DefaultContentType string    `json:"defaultContentType"`
-	Timeout            int       `json:"timeout"`
-	Cors               bool      `json:"cors"`
-	Requests           []Request `json:"requests"`
-}
-
-type Request struct {
-	ID          string `json:"id"`
-	TokenID     string `json:"tokenId"`
-	Method      string `json:"method"`
-	URL         string `json:"url"`
-	Hostname    string `json:"hostname"`
-	Path        string `json:"path"`
-	Headers     string `json:"headers"`
-	Query       string `json:"query"`
-	Body        string `json:"body"`
-	IP          string `json:"ip"`
-	UserAgent   string `json:"userAgent"`
-	CreatedAt   string `json:"createdAt"`
-}
-
-type RequestPage struct {
-	Data        []Request `json:"data"`
-	Total       int       `json:"total"`
-	PerPage     int       `json:"perPage"`
-	CurrentPage int       `json:"currentPage"`
-	IsLastPage  bool      `json:"isLastPage"`
-	From        int       `json:"from"`
-	To          int       `json:"to"`
-}
-
-// --- fixtures ---
-
-const tokenFields = `
-	id url createdAt requestCount
-	defaultStatus defaultContent defaultContentType
-	timeout cors
-`
-
-const requestFields = `
-	id tokenId method url hostname path
-	headers query body ip userAgent createdAt
-`
-
-// createToken creates a token with default settings and fails the test on error.
-func createToken(t *testing.T) Token {
-	t.Helper()
-	type data struct {
-		CreateToken Token `json:"createToken"`
-	}
-	return doGQL[data](t, `mutation { createToken {`+tokenFields+`} }`, nil).CreateToken
-}
-
-// sendWebhook posts to the token's URL and returns the resty response.
-func sendWebhook(t *testing.T, tokenURL, method, body, contentType string) *resty.Response {
-	t.Helper()
-	req := resty.New().R().SetBody(body)
-	if contentType != "" {
-		req.SetHeader("Content-Type", contentType)
-	}
-	resp, err := req.Execute(method, tokenURL)
-	if err != nil {
-		t.Fatalf("sendWebhook: %v", err)
-	}
-	return resp
-}
-
 // --- tests ---
 
+// TestCreateToken verifies that CreateToken (CreateToken mutation) returns a token with default values.
+// Scenario: Create a token with no custom settings.
+// Expects: Token has generated ID and URL, default status 200, content-type text/plain, CORS disabled.
 func TestCreateToken(t *testing.T) {
 	token := createToken(t)
 
@@ -193,23 +74,23 @@ func TestCreateToken(t *testing.T) {
 	t.Logf("token id=%s url=%s", token.ID, token.URL)
 }
 
+// TestCreateTokenWithCustomResponse tests the CreateToken mutation with custom response settings.
+// Scenario: Create token with custom status (201), content, type (application/json), and CORS enabled.
+// Expects: Token reflects all custom settings.
 func TestCreateTokenWithCustomResponse(t *testing.T) {
-	type data struct {
-		CreateToken Token `json:"createToken"`
+	token, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{
+		DefaultStatus:      ptr(201),
+		DefaultContent:     ptr("hello"),
+		DefaultContentType: ptr("application/json"),
+		Timeout:            ptr(0),
+		Cors:               ptr(true),
+	})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
 	}
-	result := doGQL[data](t, `
-		mutation {
-			createToken(
-				defaultStatus: 201
-				defaultContent: "hello"
-				defaultContentType: "application/json"
-				timeout: 0
-				cors: true
-			) {`+tokenFields+`}
-		}
-	`, nil)
-
-	token := result.CreateToken
+	if token == nil {
+		t.Fatal("CreateToken returned nil")
+	}
 
 	if token.DefaultStatus != 201 {
 		t.Errorf("defaultStatus: got %d, want 201", token.DefaultStatus)
@@ -225,42 +106,52 @@ func TestCreateTokenWithCustomResponse(t *testing.T) {
 	}
 }
 
+// TestGetToken tests the Token query API (fetch token by ID).
+// Scenario: Create a token, then retrieve it by ID.
+// Expects: Returned token matches created token ID.
 func TestGetToken(t *testing.T) {
 	created := createToken(t)
 
-	type data struct {
-		Token Token `json:"token"`
+	tok, err := gqlClient.Token(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Token: %v", err)
 	}
-	result := doGQL[data](t, `query($id: ID!) { token(id: $id) {`+tokenFields+`} }`,
-		map[string]any{"id": created.ID})
-
-	if result.Token.ID != created.ID {
-		t.Errorf("token id: got %q, want %q", result.Token.ID, created.ID)
+	if tok == nil {
+		t.Fatal("Token returned nil")
+	}
+	if tok.ID != created.ID {
+		t.Errorf("token id: got %q, want %q", tok.ID, created.ID)
 	}
 }
 
+// TestGetTokenNotFound tests the Token query API with invalid ID.
+// Scenario: Query a token with a non-existent UUID.
+// Expects: Returns nil, no error.
 func TestGetTokenNotFound(t *testing.T) {
-	type data struct {
-		Token *Token `json:"token"`
+	tok, err := gqlClient.Token(context.Background(), "00000000-0000-0000-0000-000000000000")
+	if err != nil {
+		t.Fatalf("Token: %v", err)
 	}
-	result := doGQL[data](t, `query { token(id: "00000000-0000-0000-0000-000000000000") {`+tokenFields+`} }`, nil)
-	if result.Token != nil {
+	if tok != nil {
 		t.Error("expected nil token for unknown id")
 	}
 }
 
+// TestListTokens tests the Tokens query API (list all tokens).
+// Scenario: Create two tokens, then list all tokens.
+// Expects: Both created tokens appear in the list.
 func TestListTokens(t *testing.T) {
 	// Create two tokens so the list is non-empty.
 	a := createToken(t)
 	b := createToken(t)
 
-	type data struct {
-		Tokens []Token `json:"tokens"`
+	tokens, err := gqlClient.Tokens(context.Background())
+	if err != nil {
+		t.Fatalf("Tokens: %v", err)
 	}
-	result := doGQL[data](t, `query { tokens {`+tokenFields+`} }`, nil)
 
 	ids := make(map[string]bool)
-	for _, tok := range result.Tokens {
+	for _, tok := range tokens {
 		ids[tok.ID] = true
 	}
 	if !ids[a.ID] {
@@ -271,25 +162,24 @@ func TestListTokens(t *testing.T) {
 	}
 }
 
+// TestUpdateToken tests the UpdateToken mutation (modify token settings).
+// Scenario: Create token, then update status (404), content, type (text/html), and enable CORS.
+// Expects: All fields updated as requested.
 func TestUpdateToken(t *testing.T) {
 	token := createToken(t)
 
-	type data struct {
-		UpdateToken Token `json:"updateToken"`
+	updated, err := gqlClient.UpdateToken(context.Background(), token.ID, sdk.UpdateTokenInput{
+		DefaultStatus:      ptr(404),
+		DefaultContent:     ptr("not here"),
+		DefaultContentType: ptr("text/html"),
+		Cors:               ptr(true),
+	})
+	if err != nil {
+		t.Fatalf("UpdateToken: %v", err)
 	}
-	result := doGQL[data](t, `
-		mutation($id: ID!) {
-			updateToken(
-				id: $id
-				defaultStatus: 404
-				defaultContent: "not here"
-				defaultContentType: "text/html"
-				cors: true
-			) {`+tokenFields+`}
-		}
-	`, map[string]any{"id": token.ID})
-
-	updated := result.UpdateToken
+	if updated == nil {
+		t.Fatal("UpdateToken returned nil")
+	}
 	if updated.DefaultStatus != 404 {
 		t.Errorf("defaultStatus: got %d, want 404", updated.DefaultStatus)
 	}
@@ -304,49 +194,57 @@ func TestUpdateToken(t *testing.T) {
 	}
 }
 
+// TestToggleCors tests the ToggleCors mutation (toggle CORS on/off).
+// Scenario: Create token (cors=false), toggle twice.
+// Expects: First toggle returns true (enabled), second toggle returns false (disabled).
 func TestToggleCors(t *testing.T) {
 	token := createToken(t) // cors starts false
 
-	type data struct {
-		ToggleCors bool `json:"toggleCors"`
-	}
-
 	// Toggle on.
-	r1 := doGQL[data](t, `mutation($id: ID!) { toggleCors(id: $id) }`, map[string]any{"id": token.ID})
-	if !r1.ToggleCors {
+	enabled, err := gqlClient.ToggleCors(context.Background(), token.ID)
+	if err != nil {
+		t.Fatalf("ToggleCors 1: %v", err)
+	}
+	if !enabled {
 		t.Error("expected cors=true after first toggle")
 	}
 
 	// Toggle off.
-	r2 := doGQL[data](t, `mutation($id: ID!) { toggleCors(id: $id) }`, map[string]any{"id": token.ID})
-	if r2.ToggleCors {
+	enabled, err = gqlClient.ToggleCors(context.Background(), token.ID)
+	if err != nil {
+		t.Fatalf("ToggleCors 2: %v", err)
+	}
+	if enabled {
 		t.Error("expected cors=false after second toggle")
 	}
 }
 
+// TestDeleteToken tests the DeleteToken mutation (delete token).
+// Scenario: Create token, delete it, attempt to retrieve.
+// Expects: DeleteToken returns true, subsequent Token query returns nil.
 func TestDeleteToken(t *testing.T) {
 	token := createToken(t)
 
-	type deleteMutation struct {
-		DeleteToken bool `json:"deleteToken"`
+	ok, err := gqlClient.DeleteToken(context.Background(), token.ID)
+	if err != nil {
+		t.Fatalf("DeleteToken: %v", err)
 	}
-	del := doGQL[deleteMutation](t, `mutation($id: ID!) { deleteToken(id: $id) }`,
-		map[string]any{"id": token.ID})
-	if !del.DeleteToken {
+	if !ok {
 		t.Error("deleteToken should return true")
 	}
 
-	// Token should no longer exist.
-	type query struct {
-		Token *Token `json:"token"`
+	tok, err := gqlClient.Token(context.Background(), token.ID)
+	if err != nil {
+		t.Fatalf("Token: %v", err)
 	}
-	q := doGQL[query](t, `query($id: ID!) { token(id: $id) {`+tokenFields+`} }`,
-		map[string]any{"id": token.ID})
-	if q.Token != nil {
+	if tok != nil {
 		t.Error("token should not exist after deletion")
 	}
 }
 
+// TestWebhookReceivesRequest tests the webhook capture API (POST /:tokenID).
+// Scenario: Send a JSON POST webhook to a token's URL.
+// Expects: Response status 200, contains X-Token-Id header matching token ID, X-Request-Id header set.
 func TestWebhookReceivesRequest(t *testing.T) {
 	token := createToken(t)
 
@@ -363,6 +261,9 @@ func TestWebhookReceivesRequest(t *testing.T) {
 	}
 }
 
+// TestWebhookUnknownTokenReturns410 tests webhook capture API with invalid token ID.
+// Scenario: Send GET request to non-existent token URL.
+// Expects: Returns 410 Gone status.
 func TestWebhookUnknownTokenReturns410(t *testing.T) {
 	resp := sendWebhook(t, serverURL+"/00000000-0000-0000-0000-000000000000", http.MethodGet, "", "")
 	if resp.StatusCode() != http.StatusGone {
@@ -370,20 +271,21 @@ func TestWebhookUnknownTokenReturns410(t *testing.T) {
 	}
 }
 
+// TestWebhookCustomResponse tests webhook capture API with custom response settings.
+// Scenario: Create token with status 202, content "accepted", type text/plain. Send POST webhook.
+// Expects: Response has status 202, body "accepted", correct Content-Type header.
 func TestWebhookCustomResponse(t *testing.T) {
-	type data struct {
-		CreateToken Token `json:"createToken"`
+	token, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{
+		DefaultStatus:      ptr(202),
+		DefaultContent:     ptr("accepted"),
+		DefaultContentType: ptr("text/plain"),
+	})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
 	}
-	result := doGQL[data](t, `
-		mutation {
-			createToken(
-				defaultStatus: 202
-				defaultContent: "accepted"
-				defaultContentType: "text/plain"
-			) {`+tokenFields+`}
-		}
-	`, nil)
-	token := result.CreateToken
+	if token == nil {
+		t.Fatal("CreateToken returned nil")
+	}
 
 	resp := sendWebhook(t, token.URL, http.MethodPost, "ping", "text/plain")
 
@@ -398,6 +300,9 @@ func TestWebhookCustomResponse(t *testing.T) {
 	}
 }
 
+// TestWebhookStatusCodeOverrideViaPath tests webhook capture API with path-based status override.
+// Scenario: Create token with default status 200, send GET to /:tokenID/418.
+// Expects: Response has status 418 (from path), not default 200.
 func TestWebhookStatusCodeOverrideViaPath(t *testing.T) {
 	token := createToken(t) // defaultStatus=200
 
@@ -408,12 +313,17 @@ func TestWebhookStatusCodeOverrideViaPath(t *testing.T) {
 	}
 }
 
+// TestWebhookCORSHeaders tests webhook capture API with CORS enabled.
+// Scenario: Create token with cors=true, send GET webhook.
+// Expects: Response includes Access-Control-Allow-Origin: * and Access-Control-Allow-Methods: *.
 func TestWebhookCORSHeaders(t *testing.T) {
-	type data struct {
-		CreateToken Token `json:"createToken"`
+	token, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{Cors: ptr(true)})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
 	}
-	result := doGQL[data](t, `mutation { createToken(cors: true) {`+tokenFields+`} }`, nil)
-	token := result.CreateToken
+	if token == nil {
+		t.Fatal("CreateToken returned nil")
+	}
 
 	resp := sendWebhook(t, token.URL, http.MethodGet, "", "")
 
@@ -425,6 +335,9 @@ func TestWebhookCORSHeaders(t *testing.T) {
 	}
 }
 
+// TestWebhookNoCORSHeadersWhenDisabled tests webhook capture API with CORS disabled.
+// Scenario: Create token with cors=false (default), send GET webhook.
+// Expects: Response does not include CORS headers.
 func TestWebhookNoCORSHeadersWhenDisabled(t *testing.T) {
 	token := createToken(t) // cors=false
 
@@ -435,49 +348,46 @@ func TestWebhookNoCORSHeadersWhenDisabled(t *testing.T) {
 	}
 }
 
+// TestGetRequest tests the Request query API (fetch captured webhook by ID).
+// Scenario: Create token, send JSON POST webhook, retrieve by request ID.
+// Expects: Returned request matches: method POST, body JSON content, tokenId matches.
 func TestGetRequest(t *testing.T) {
 	token := createToken(t)
 	sendWebhook(t, token.URL, http.MethodPost, `{"x":1}`, "application/json")
 
-	// Fetch via GraphQL requests list to get the ID.
-	type pageData struct {
-		Requests RequestPage `json:"requests"`
+	page, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{})
+	if err != nil {
+		t.Fatalf("Requests: %v", err)
 	}
-	page := doGQL[pageData](t, `
-		query($tokenId: ID!) {
-			requests(tokenId: $tokenId) {
-				data {`+requestFields+`}
-				total
-			}
-		}
-	`, map[string]any{"tokenId": token.ID})
+	if page.Total != 1 {
+		t.Fatalf("expected 1 request, got %d", page.Total)
+	}
+	req := page.Data[0]
 
-	if page.Requests.Total != 1 {
-		t.Fatalf("expected 1 request, got %d", page.Requests.Total)
+	byID, err := gqlClient.Request(context.Background(), req.ID)
+	if err != nil {
+		t.Fatalf("Request: %v", err)
 	}
-	req := page.Requests.Data[0]
-
-	// Now fetch by ID.
-	type reqData struct {
-		Request Request `json:"request"`
+	if byID == nil {
+		t.Fatal("Request returned nil")
 	}
-	byID := doGQL[reqData](t, `query($id: ID!) { request(id: $id) {`+requestFields+`} }`,
-		map[string]any{"id": req.ID})
-
-	if byID.Request.ID != req.ID {
-		t.Errorf("request id mismatch: got %q, want %q", byID.Request.ID, req.ID)
+	if byID.ID != req.ID {
+		t.Errorf("request id mismatch: got %q, want %q", byID.ID, req.ID)
 	}
-	if byID.Request.Method != "POST" {
-		t.Errorf("method: got %q, want POST", byID.Request.Method)
+	if byID.Method != "POST" {
+		t.Errorf("method: got %q, want POST", byID.Method)
 	}
-	if byID.Request.Body != `{"x":1}` {
-		t.Errorf("body: got %q, want {\"x\":1}", byID.Request.Body)
+	if byID.Body != `{"x":1}` {
+		t.Errorf("body: got %q, want {\"x\":1}", byID.Body)
 	}
-	if byID.Request.TokenID != token.ID {
-		t.Errorf("tokenId: got %q, want %q", byID.Request.TokenID, token.ID)
+	if byID.TokenID != token.ID {
+		t.Errorf("tokenId: got %q, want %q", byID.TokenID, token.ID)
 	}
 }
 
+// TestListRequestsPagination tests the Requests query API with pagination.
+// Scenario: Create token, send 5 webhooks, query with page=1 perPage=2, then page=3 perPage=2.
+// Expects: Page 1 has 2 items, not last page. Page 3 has 1 item, is last page. Total is 5.
 func TestListRequestsPagination(t *testing.T) {
 	token := createToken(t)
 
@@ -486,19 +396,11 @@ func TestListRequestsPagination(t *testing.T) {
 		sendWebhook(t, token.URL, http.MethodPost, fmt.Sprintf(`{"i":%d}`, i), "application/json")
 	}
 
-	type pageData struct {
-		Requests RequestPage `json:"requests"`
-	}
-
 	// Page 1, 2 per page.
-	p1 := doGQL[pageData](t, `
-		query($tokenId: ID!) {
-			requests(tokenId: $tokenId, page: 1, perPage: 2) {
-				data {`+requestFields+`}
-				total perPage currentPage isLastPage from to
-			}
-		}
-	`, map[string]any{"tokenId": token.ID}).Requests
+	p1, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{Page: ptr(1), PerPage: ptr(2)})
+	if err != nil {
+		t.Fatalf("Requests page1: %v", err)
+	}
 
 	if p1.Total != 5 {
 		t.Errorf("total: got %d, want 5", p1.Total)
@@ -514,14 +416,10 @@ func TestListRequestsPagination(t *testing.T) {
 	}
 
 	// Last page.
-	p3 := doGQL[pageData](t, `
-		query($tokenId: ID!) {
-			requests(tokenId: $tokenId, page: 3, perPage: 2) {
-				data {`+requestFields+`}
-				total perPage currentPage isLastPage from to
-			}
-		}
-	`, map[string]any{"tokenId": token.ID}).Requests
+	p3, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{Page: ptr(3), PerPage: ptr(2)})
+	if err != nil {
+		t.Fatalf("Requests page3: %v", err)
+	}
 
 	if len(p3.Data) != 1 {
 		t.Errorf("page 3 items: got %d, want 1", len(p3.Data))
@@ -531,23 +429,19 @@ func TestListRequestsPagination(t *testing.T) {
 	}
 }
 
+// TestListRequestsSortingNewest tests the Requests query API with sorting.
+// Scenario: Create token, send 2 webhooks (first, second), query with sorting=newest.
+// Expects: First result has body "second" (newest first).
 func TestListRequestsSortingNewest(t *testing.T) {
 	token := createToken(t)
 
 	sendWebhook(t, token.URL, http.MethodPost, `{"order":"first"}`, "application/json")
 	sendWebhook(t, token.URL, http.MethodPost, `{"order":"second"}`, "application/json")
 
-	type pageData struct {
-		Requests RequestPage `json:"requests"`
+	result, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{Sorting: ptr("newest")})
+	if err != nil {
+		t.Fatalf("Requests newest: %v", err)
 	}
-
-	result := doGQL[pageData](t, `
-		query($tokenId: ID!) {
-			requests(tokenId: $tokenId, sorting: "newest") {
-				data { body }
-			}
-		}
-	`, map[string]any{"tokenId": token.ID}).Requests
 
 	if len(result.Data) < 2 {
 		t.Fatalf("expected at least 2 requests, got %d", len(result.Data))
@@ -557,66 +451,68 @@ func TestListRequestsSortingNewest(t *testing.T) {
 	}
 }
 
+// TestDeleteRequest tests the DeleteRequest mutation (delete captured webhook).
+// Scenario: Create token, send webhook (1 total), delete it, list requests.
+// Expects: DeleteRequest returns true, total count after delete is 0.
 func TestDeleteRequest(t *testing.T) {
 	token := createToken(t)
 	sendWebhook(t, token.URL, http.MethodGet, "", "")
 
-	type pageData struct {
-		Requests RequestPage `json:"requests"`
+	page, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{})
+	if err != nil {
+		t.Fatalf("Requests before delete: %v", err)
 	}
-	page := doGQL[pageData](t, `
-		query($tokenId: ID!) { requests(tokenId: $tokenId) { data { id } total } }
-	`, map[string]any{"tokenId": token.ID}).Requests
-
 	if page.Total != 1 {
 		t.Fatalf("expected 1 request before delete, got %d", page.Total)
 	}
 	reqID := page.Data[0].ID
 
-	type delData struct {
-		DeleteRequest bool `json:"deleteRequest"`
+	ok, err := gqlClient.DeleteRequest(context.Background(), reqID)
+	if err != nil {
+		t.Fatalf("DeleteRequest: %v", err)
 	}
-	del := doGQL[delData](t, `mutation($id: ID!) { deleteRequest(id: $id) }`,
-		map[string]any{"id": reqID})
-	if !del.DeleteRequest {
+	if !ok {
 		t.Error("deleteRequest should return true")
 	}
 
-	// Confirm gone.
-	after := doGQL[pageData](t, `
-		query($tokenId: ID!) { requests(tokenId: $tokenId) { data { id } total } }
-	`, map[string]any{"tokenId": token.ID}).Requests
+	after, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{})
+	if err != nil {
+		t.Fatalf("Requests after delete: %v", err)
+	}
 	if after.Total != 0 {
 		t.Errorf("expected 0 requests after delete, got %d", after.Total)
 	}
 }
 
+// TestClearRequests tests the ClearRequests mutation (delete all webhooks for token).
+// Scenario: Create token, send 2 webhooks, clear all, list requests.
+// Expects: ClearRequests returns true, total count after clear is 0.
 func TestClearRequests(t *testing.T) {
 	token := createToken(t)
 
 	sendWebhook(t, token.URL, http.MethodGet, "", "")
 	sendWebhook(t, token.URL, http.MethodGet, "", "")
 
-	type clearData struct {
-		ClearRequests bool `json:"clearRequests"`
+	ok, err := gqlClient.ClearRequests(context.Background(), token.ID)
+	if err != nil {
+		t.Fatalf("ClearRequests: %v", err)
 	}
-	cleared := doGQL[clearData](t, `mutation($tokenId: ID!) { clearRequests(tokenId: $tokenId) }`,
-		map[string]any{"tokenId": token.ID})
-	if !cleared.ClearRequests {
+	if !ok {
 		t.Error("clearRequests should return true")
 	}
 
-	type pageData struct {
-		Requests RequestPage `json:"requests"`
+	page, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{})
+	if err != nil {
+		t.Fatalf("Requests after clear: %v", err)
 	}
-	page := doGQL[pageData](t, `
-		query($tokenId: ID!) { requests(tokenId: $tokenId) { data { id } total } }
-	`, map[string]any{"tokenId": token.ID}).Requests
 	if page.Total != 0 {
 		t.Errorf("expected 0 requests after clear, got %d", page.Total)
 	}
 }
 
+// TestDeleteTokenAlsoDeletesRequests tests cascade delete (DeleteToken → deletes all captured webhooks).
+// Scenario: Create token, send 2 webhooks, delete token, try to retrieve webhooks.
+// Expects: Each webhook query returns nil (deleted).
 func TestDeleteTokenAlsoDeletesRequests(t *testing.T) {
 	token := createToken(t)
 
@@ -624,14 +520,10 @@ func TestDeleteTokenAlsoDeletesRequests(t *testing.T) {
 	sendWebhook(t, token.URL, http.MethodPost, "first", "text/plain")
 	sendWebhook(t, token.URL, http.MethodPost, "second", "text/plain")
 
-	// Collect the request IDs before deletion.
-	type pageData struct {
-		Requests RequestPage `json:"requests"`
+	before, err := gqlClient.Requests(context.Background(), token.ID, sdk.RequestsOptions{})
+	if err != nil {
+		t.Fatalf("Requests before token delete: %v", err)
 	}
-	before := doGQL[pageData](t, `
-		query($tokenId: ID!) { requests(tokenId: $tokenId) { data { id } total } }
-	`, map[string]any{"tokenId": token.ID}).Requests
-
 	if before.Total != 2 {
 		t.Fatalf("expected 2 requests before delete, got %d", before.Total)
 	}
@@ -640,25 +532,28 @@ func TestDeleteTokenAlsoDeletesRequests(t *testing.T) {
 		reqIDs[i] = r.ID
 	}
 
-	// Delete the token.
-	type delData struct {
-		DeleteToken bool `json:"deleteToken"`
+	ok, err := gqlClient.DeleteToken(context.Background(), token.ID)
+	if err != nil {
+		t.Fatalf("DeleteToken: %v", err)
 	}
-	doGQL[delData](t, `mutation($id: ID!) { deleteToken(id: $id) }`, map[string]any{"id": token.ID})
+	if !ok {
+		t.Fatal("deleteToken returned false")
+	}
 
-	// Each individual request must no longer be retrievable.
-	type reqData struct {
-		Request *Request `json:"request"`
-	}
 	for _, id := range reqIDs {
-		result := doGQL[reqData](t, `query($id: ID!) { request(id: $id) { id } }`,
-			map[string]any{"id": id})
-		if result.Request != nil {
+		req, err := gqlClient.Request(context.Background(), id)
+		if err != nil {
+			t.Fatalf("Request(%s): %v", id, err)
+		}
+		if req != nil {
 			t.Errorf("request %s still exists after token deletion", id)
 		}
 	}
 }
 
+// TestHealthEndpoint tests the /health management endpoint.
+// Scenario: Send GET request to /health.
+// Expects: Status 200, response body contains {"status": "ok"}.
 func TestHealthEndpoint(t *testing.T) {
 	resp, err := client().R().Get("/health")
 	if err != nil {

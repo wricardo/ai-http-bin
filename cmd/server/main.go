@@ -53,7 +53,7 @@ func runLocal(ctx context.Context) {
 
 	log.Printf("AI HTTP Bin running on :%d", port)
 	log.Printf("API spec:         %s/", baseURL)
-	log.Printf("REST API:         %s/api/tokens", baseURL)
+	log.Printf("GraphQL API:      %s/graphql", baseURL)
 	log.Printf("GraphQL:          %s/playground", baseURL)
 	log.Printf("Webhook receiver: %s/<token-id>", baseURL)
 
@@ -86,7 +86,7 @@ func runNgrok(ctx context.Context) {
 
 	log.Printf("AI HTTP Bin exposed at %s", baseURL)
 	log.Printf("API spec:         %s/", baseURL)
-	log.Printf("REST API:         %s/api/tokens", baseURL)
+	log.Printf("GraphQL API:      %s/graphql", baseURL)
 	log.Printf("GraphQL:          %s/playground", baseURL)
 	log.Printf("Webhook receiver: %s/<token-id>", baseURL)
 

@@ -1263,31 +1263,60 @@ function parseJsonObj(str) {
   try { return JSON.parse(str); } catch(e) { return null; }
 }
 
-// ── API ────────────────────────────────────────────────────────────
-function apiFetch(method, path, body) {
-  var opts = { method: method, headers: {} };
-  if (body !== undefined && body !== null) {
-    opts.headers['Content-Type'] = 'application/json';
-    opts.body = JSON.stringify(body);
-  }
-  return fetch(BASE + path, opts).then(function(res) {
+// ── API (GraphQL) ──────────────────────────────────────────────────
+var TOKEN_FIELDS = 'id agent_id:agentId url ip user_agent:userAgent created_at:createdAt expires_at:expiresAt request_count:requestCount default_status:defaultStatus default_content:defaultContent default_content_type:defaultContentType timeout cors script';
+
+function gqlFetch(query, variables) {
+  return fetch(BASE + '/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: query, variables: variables || {} })
+  }).then(function(res) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    if (res.status === 204) return null;
     return res.json();
+  }).then(function(payload) {
+    if (payload.errors && payload.errors.length > 0) {
+      var msg = payload.errors.map(function(e) { return e.message || 'GraphQL error'; }).join('; ');
+      throw new Error(msg);
+    }
+    return payload.data || {};
   });
+}
+
+function normalizeToken(t) {
+  if (!t) return null;
+  return {
+    id: t.id,
+    agent_id: t.agent_id || t.agentId || '',
+    url: t.url || '',
+    ip: t.ip || '',
+    user_agent: t.user_agent || t.userAgent || '',
+    created_at: t.created_at || t.createdAt || '',
+    expires_at: t.expires_at || t.expiresAt || '',
+    request_count: t.request_count != null ? t.request_count : (t.requestCount || 0),
+    default_status: t.default_status != null ? t.default_status : (t.defaultStatus || 200),
+    default_content: t.default_content != null ? t.default_content : (t.defaultContent || ''),
+    default_content_type: t.default_content_type || t.defaultContentType || 'text/plain',
+    timeout: t.timeout || 0,
+    cors: !!t.cors,
+    script: t.script || ''
+  };
 }
 
 // ── TOKEN API ──────────────────────────────────────────────────────
 function loadTokens() {
-  return apiFetch('GET', '/api/tokens').then(function(data) {
-    tokens = data || [];
+  var query = 'query { tokens { ' + TOKEN_FIELDS + ' } }';
+  return gqlFetch(query).then(function(data) {
+    tokens = (data.tokens || []).map(normalizeToken);
     updateTokenSummary();
     renderTokenTabs();
   }).catch(function(err) { console.error('loadTokens:', err); });
 }
 
 function createToken() {
-  apiFetch('POST', '/api/tokens', {}).then(function(t) {
+  var mutation = 'mutation { createToken { ' + TOKEN_FIELDS + ' } }';
+  gqlFetch(mutation).then(function(data) {
+    var t = normalizeToken(data.createToken);
     tokens.unshift(t);
     updateTokenSummary();
     renderTokenTabs();
@@ -1296,7 +1325,9 @@ function createToken() {
 }
 
 function deleteToken(tokenId) {
-  apiFetch('DELETE', '/api/tokens/' + tokenId).then(function() {
+  var mutation = 'mutation($id: ID!) { deleteToken(id: $id) }';
+  gqlFetch(mutation, { id: tokenId }).then(function(data) {
+    if (!data.deleteToken) throw new Error('delete failed');
     tokens = tokens.filter(function(t) { return t.id !== tokenId; });
     if (selectedToken && selectedToken.id === tokenId) {
       selectedToken   = null;
@@ -1313,18 +1344,22 @@ function deleteToken(tokenId) {
 
 // ── REQUEST API ────────────────────────────────────────────────────
 function loadRequests(token) {
-  return apiFetch('GET', '/api/tokens/' + token.id + '/requests?per_page=200&sorting=newest').then(function(data) {
-    var reqs = (data.data || []).map(normalizeReq);
+  var query = 'query($tokenId: ID!, $perPage: Int, $sorting: String) { requests(tokenId: $tokenId, perPage: $perPage, sorting: $sorting) { total data { id token_id:tokenId method url hostname path headers query body form_data:formData ip user_agent:userAgent created_at:createdAt } } }';
+  return gqlFetch(query, { tokenId: token.id, perPage: 200, sorting: 'newest' }).then(function(data) {
+    var page = data.requests || { total: 0, data: [] };
+    var reqs = (page.data || []).map(normalizeReq);
     requestsMap[token.id] = reqs;
     var t = findToken(token.id);
-    if (t) t.request_count = data.total || reqs.length;
+    if (t) t.request_count = page.total || reqs.length;
     renderFeed(token);
     renderTokenTabs();
   }).catch(function(err) { console.error('loadRequests:', err); });
 }
 
 function clearRequests(token) {
-  apiFetch('DELETE', '/api/tokens/' + token.id + '/requests').then(function() {
+  var mutation = 'mutation($tokenId: ID!) { clearRequests(tokenId: $tokenId) }';
+  gqlFetch(mutation, { tokenId: token.id }).then(function(data) {
+    if (!data.clearRequests) throw new Error('clear failed');
     requestsMap[token.id] = [];
     var t = findToken(token.id);
     if (t) t.request_count = 0;
@@ -1338,7 +1373,9 @@ function clearRequests(token) {
 }
 
 function deleteRequest(reqId) {
-  apiFetch('DELETE', '/api/requests/' + reqId).then(function() {
+  var mutation = 'mutation($id: ID!) { deleteRequest(id: $id) }';
+  gqlFetch(mutation, { id: reqId }).then(function(data) {
+    if (!data.deleteRequest) throw new Error('delete failed');
     if (selectedToken) {
       var arr = requestsMap[selectedToken.id] || [];
       requestsMap[selectedToken.id] = arr.filter(function(r) { return r.id !== reqId; });
@@ -1355,8 +1392,8 @@ function deleteRequest(reqId) {
 
 // ── GLOBAL VARS API ────────────────────────────────────────────────
 function loadGlobalVars() {
-  apiFetch('GET', '/api/vars').then(function(data) {
-    globalVars = data || [];
+  gqlFetch('query { globalVars { key value } }').then(function(data) {
+    globalVars = data.globalVars || [];
     renderVars();
   }).catch(function(err) { console.error('loadGlobalVars:', err); });
 }
@@ -1377,23 +1414,23 @@ function saveTokenConfig() {
   btn.textContent = 'Saving…';
   btn.disabled = true;
 
-  apiFetch('PUT', '/api/tokens/' + id, {
-    default_status:       status,
-    default_content_type: ct,
-    default_content:      content,
-    timeout:              timeout,
-    cors:                 cors,
-    script:               script
-  }).then(function(updated) {
-    // sync local state
+  var updateMutation = 'mutation($id: ID!, $defaultStatus: Int, $defaultContent: String, $defaultContentType: String, $timeout: Int, $cors: Boolean) { updateToken(id: $id, defaultStatus: $defaultStatus, defaultContent: $defaultContent, defaultContentType: $defaultContentType, timeout: $timeout, cors: $cors) { ' + TOKEN_FIELDS + ' } }';
+  var setScriptMutation = 'mutation($id: ID!, $script: String!) { setScript(id: $id, script: $script) { ' + TOKEN_FIELDS + ' } }';
+
+  gqlFetch(updateMutation, {
+    id: id,
+    defaultStatus: status,
+    defaultContentType: ct,
+    defaultContent: content,
+    timeout: timeout,
+    cors: cors
+  }).then(function() {
+    return gqlFetch(setScriptMutation, { id: id, script: script });
+  }).then(function(data) {
+    var updated = normalizeToken(data.setScript);
     var t = findToken(id);
-    if (t) {
-      t.default_status       = status;
-      t.default_content_type = ct;
-      t.default_content      = content;
-      t.timeout              = timeout;
-      t.cors                 = cors;
-      t.script               = script;
+    if (t && updated) {
+      Object.keys(updated).forEach(function(k) { t[k] = updated[k]; });
     }
     closeConfigModal();
     showToast('saved');

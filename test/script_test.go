@@ -3,104 +3,19 @@ package test
 // Tests for JS scripting and global variable features.
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/go-resty/resty/v2"
+	"github.com/wricardo/ai-http-bin/pkg/sdk"
 )
-
-// --- helpers ---
-
-func createTokenWithScript(t *testing.T, script string) string {
-	t.Helper()
-	type resp struct {
-		CreateToken struct {
-			ID string `json:"id"`
-		} `json:"createToken"`
-	}
-	data := doGQL[resp](t, `mutation($s: String!) {
-		createToken(script: $s) { id }
-	}`, map[string]any{"s": script})
-	id := data.CreateToken.ID
-	if id == "" {
-		t.Fatal("createToken returned empty id")
-	}
-	return id
-}
-
-func setScript(t *testing.T, tokenID, script string) {
-	t.Helper()
-	type resp struct {
-		SetScript struct {
-			ID     string `json:"id"`
-			Script string `json:"script"`
-		} `json:"setScript"`
-	}
-	data := doGQL[resp](t, `mutation($id: ID!, $s: String!) {
-		setScript(id: $id, script: $s) { id script }
-	}`, map[string]any{"id": tokenID, "s": script})
-	if data.SetScript.ID != tokenID {
-		t.Fatalf("setScript returned wrong id: %s", data.SetScript.ID)
-	}
-}
-
-func hitToken(t *testing.T, tokenID, method, path, body string) *webhookResponse {
-	t.Helper()
-	req := client().R()
-	if body != "" {
-		req.SetBody(body).SetHeader("Content-Type", "application/json")
-	}
-	url := "/" + tokenID
-	if path != "" {
-		url += "/" + path
-	}
-	var resp *resty.Response
-	var err error
-	switch method {
-	case http.MethodGet:
-		resp, err = req.Get(url)
-	case http.MethodPost:
-		resp, err = req.Post(url)
-	case http.MethodPut:
-		resp, err = req.Put(url)
-	case http.MethodDelete:
-		resp, err = req.Delete(url)
-	default:
-		t.Fatalf("unsupported method: %s", method)
-	}
-	if err != nil {
-		t.Fatalf("hit token: %v", err)
-	}
-	return &webhookResponse{Response: resp}
-}
-
-type webhookResponse struct {
-	*resty.Response
-}
-
-func (w *webhookResponse) mustStatus(t *testing.T, code int) {
-	t.Helper()
-	if w.StatusCode() != code {
-		t.Fatalf("expected status %d, got %d: %s", code, w.StatusCode(), w.String())
-	}
-}
-
-func (w *webhookResponse) mustJSONField(t *testing.T, field string) any {
-	t.Helper()
-	var m map[string]any
-	if err := json.Unmarshal(w.Body(), &m); err != nil {
-		t.Fatalf("parse response JSON: %v", err)
-	}
-	v, ok := m[field]
-	if !ok {
-		t.Fatalf("field %q not found in response: %s", field, w.String())
-	}
-	return v
-}
 
 // --- Script tests ---
 
+// TestScriptSimpleRespond tests the Script execution API (respond function in JS).
+// Scenario: Create a token with script that calls respond(201, JSON, "application/json").
+// Expects: GET request returns 201 status with JSON body parsed successfully.
 func TestScriptSimpleRespond(t *testing.T) {
 	id := createTokenWithScript(t, `respond(201, '{"ok":true}', "application/json");`)
 	r := hitToken(t, id, http.MethodGet, "", "")
@@ -108,6 +23,9 @@ func TestScriptSimpleRespond(t *testing.T) {
 	r.mustJSONField(t, "ok")
 }
 
+// TestScriptReadsRequestMethod tests the Script execution API (request object access).
+// Scenario: Create token with script checking request.method, send POST and GET.
+// Expects: POST returns {"method":"post"}, GET returns {"method":"other"}.
 func TestScriptReadsRequestMethod(t *testing.T) {
 	script := `
 		if (request.method === "POST") {
@@ -131,6 +49,9 @@ func TestScriptReadsRequestMethod(t *testing.T) {
 	}
 }
 
+// TestScriptReadsRequestBody tests the Script execution API (request.body access).
+// Scenario: Create token with script parsing request.body JSON, send POST with {"name":"alice"}.
+// Expects: Response returns {"echo":"alice"}.
 func TestScriptReadsRequestBody(t *testing.T) {
 	script := `
 		var b = JSON.parse(request.body || "{}");
@@ -144,6 +65,9 @@ func TestScriptReadsRequestBody(t *testing.T) {
 	}
 }
 
+// TestScriptReadsRequestPath tests the Script execution API (request.path access).
+// Scenario: Create token with script echoing request.path, send GET to /:tokenID/foo/bar.
+// Expects: Response returns {"path":"/foo/bar"}.
 func TestScriptReadsRequestPath(t *testing.T) {
 	script := `respond(200, JSON.stringify({ path: request.path }), "application/json");`
 	id := createTokenWithScript(t, script)
@@ -154,6 +78,9 @@ func TestScriptReadsRequestPath(t *testing.T) {
 	}
 }
 
+// TestScriptReadsQueryParams tests the Script execution API (request.query access).
+// Scenario: Create token with script echoing request.query.q, send GET with ?q=hello.
+// Expects: Response returns {"q":"hello"}.
 func TestScriptReadsQueryParams(t *testing.T) {
 	script := `respond(200, JSON.stringify({ q: request.query.q }), "application/json");`
 	id := createTokenWithScript(t, script)
@@ -169,6 +96,9 @@ func TestScriptReadsQueryParams(t *testing.T) {
 	}
 }
 
+// TestScriptGlobalVarPersistsAcrossRequests tests global variable API (store/load).
+// Scenario: Create token with script incrementing counter via store/load, send 3 requests.
+// Expects: Requests return count 1, 2, 3 respectively.
 func TestScriptGlobalVarPersistsAcrossRequests(t *testing.T) {
 	script := `
 		var count = parseInt(load("counter") || "0") + 1;
@@ -186,6 +116,9 @@ func TestScriptGlobalVarPersistsAcrossRequests(t *testing.T) {
 	}
 }
 
+// TestScriptStatefulMockTodoAPI tests global variable API with stateful operations.
+// Scenario: Create token with script implementing full CRUD todo API (GET/POST/PUT/DELETE) with state.
+// Expects: GET empty, POST creates todos, PUT updates, DELETE removes, GET reflects state.
 func TestScriptStatefulMockTodoAPI(t *testing.T) {
 	script := `
 		var body = JSON.parse(request.body || "{}");
@@ -260,6 +193,9 @@ func TestScriptStatefulMockTodoAPI(t *testing.T) {
 	}
 }
 
+// TestScriptErrorReturns500WithHeader tests Script execution error handling.
+// Scenario: Create token with script that throws Error("boom"), send request.
+// Expects: Response status 500, X-Script-Error header is set.
 func TestScriptErrorReturns500WithHeader(t *testing.T) {
 	id := createTokenWithScript(t, `throw new Error("boom");`)
 	r := hitToken(t, id, http.MethodGet, "", "")
@@ -269,6 +205,9 @@ func TestScriptErrorReturns500WithHeader(t *testing.T) {
 	}
 }
 
+// TestScriptTimeout tests Script execution timeout.
+// Scenario: Create token with infinite loop (while(true){}), send request.
+// Expects: Response status 500, X-Script-Error header set (timeout killed script).
 func TestScriptTimeout(t *testing.T) {
 	// Infinite loop — should be killed by the 2s timeout
 	id := createTokenWithScript(t, `while(true){}`)
@@ -279,13 +218,19 @@ func TestScriptTimeout(t *testing.T) {
 	}
 }
 
+// TestSetScriptMutation tests the SetScript mutation (update token script).
+// Scenario: Create token without script, set script via mutation, send request.
+// Expects: Request handled by new script (status 202, body "scripted").
 func TestSetScriptMutation(t *testing.T) {
 	// Create token without script, then set script via mutation
-	type createResp struct {
-		CreateToken struct{ ID string `json:"id"` } `json:"createToken"`
+	tok, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
 	}
-	data := doGQL[createResp](t, `mutation { createToken { id } }`, nil)
-	id := data.CreateToken.ID
+	if tok == nil {
+		t.Fatal("CreateToken returned nil")
+	}
+	id := tok.ID
 
 	setScript(t, id, `respond(202, "scripted", "text/plain");`)
 
@@ -296,15 +241,23 @@ func TestSetScriptMutation(t *testing.T) {
 	}
 }
 
+// TestScriptOverridesStaticResponse tests Script execution priority (script > static response).
+// Scenario: Create token with static response and script, send request.
+// Expects: Script response returned (status 418, body "script wins"), not static response.
 func TestScriptOverridesStaticResponse(t *testing.T) {
 	// Token has both default_content and a script — script wins
-	type resp struct {
-		CreateToken struct{ ID string `json:"id"` } `json:"createToken"`
+	tok, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{
+		DefaultContent: ptr("static"),
+		DefaultStatus:  ptr(200),
+		Script:         ptr("respond(418, 'script wins', 'text/plain');"),
+	})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
 	}
-	data := doGQL[resp](t, `mutation {
-		createToken(defaultContent: "static", defaultStatus: 200, script: "respond(418, 'script wins', 'text/plain');") { id }
-	}`, nil)
-	id := data.CreateToken.ID
+	if tok == nil {
+		t.Fatal("CreateToken returned nil")
+	}
+	id := tok.ID
 
 	r := hitToken(t, id, http.MethodGet, "", "")
 	r.mustStatus(t, 418)
@@ -313,95 +266,91 @@ func TestScriptOverridesStaticResponse(t *testing.T) {
 	}
 }
 
-// --- Global vars REST API tests ---
+// --- Global vars GraphQL API tests ---
 
-func TestGlobalVarsRESTCRUD(t *testing.T) {
-	c := client()
-
-	// Set a var
-	resp, err := c.R().SetBody(`{"value":"hello"}`).Put("/api/vars/mykey")
-	if err != nil || resp.StatusCode() != 200 {
-		t.Fatalf("set var failed: %v %s", err, resp.String())
+// TestGlobalVarsCRUD tests global vars create/list/delete via GraphQL.
+// Scenario: set var, list vars, delete var, verify deleted.
+// Expects: var appears after set and is absent after delete.
+func TestGlobalVarsCRUD(t *testing.T) {
+	setVar, err := gqlClient.SetGlobalVar(context.Background(), "mykey", "hello")
+	if err != nil {
+		t.Fatalf("SetGlobalVar: %v", err)
+	}
+	if setVar == nil || setVar.Key != "mykey" || setVar.Value != "hello" {
+		t.Fatalf("unexpected setGlobalVar result: %+v", setVar)
 	}
 
-	// List vars
-	resp, err = c.R().Get("/api/vars")
-	if err != nil || resp.StatusCode() != 200 {
-		t.Fatalf("list vars failed: %v %s", err, resp.String())
-	}
-	var vars []map[string]string
-	if err := json.Unmarshal(resp.Body(), &vars); err != nil {
-		t.Fatalf("parse vars: %v", err)
+	vars, err := gqlClient.GlobalVars(context.Background())
+	if err != nil {
+		t.Fatalf("GlobalVars: %v", err)
 	}
 	found := false
 	for _, v := range vars {
-		if v["key"] == "mykey" && v["value"] == "hello" {
+		if v.Key == "mykey" && v.Value == "hello" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("mykey not found in vars: %s", resp.String())
+		t.Fatalf("mykey not found in globalVars: %+v", vars)
 	}
 
-	// Delete var
-	resp, err = c.R().Delete("/api/vars/mykey")
-	if err != nil || resp.StatusCode() != 200 {
-		t.Fatalf("delete var failed: %v %s", err, resp.String())
-	}
-
-	// Verify deleted
-	resp, err = c.R().Get("/api/vars")
+	deleted, err := gqlClient.DeleteGlobalVar(context.Background(), "mykey")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("DeleteGlobalVar: %v", err)
 	}
-	json.Unmarshal(resp.Body(), &vars)
+	if !deleted {
+		t.Fatal("DeleteGlobalVar returned false")
+	}
+
+	vars, err = gqlClient.GlobalVars(context.Background())
+	if err != nil {
+		t.Fatalf("GlobalVars after delete: %v", err)
+	}
 	for _, v := range vars {
-		if v["key"] == "mykey" {
+		if v.Key == "mykey" {
 			t.Fatal("mykey still present after delete")
 		}
 	}
 }
 
+// TestGlobalVarsGraphQL tests the global vars GraphQL API (SetGlobalVar, GlobalVars, DeleteGlobalVar).
+// Scenario: Set var via mutation, list via query, delete via mutation, verify deleted.
+// Expects: All operations succeed, var appears in list, removed after delete.
 func TestGlobalVarsGraphQL(t *testing.T) {
-	type setResp struct {
-		SetGlobalVar struct {
-			Key   string `json:"key"`
-			Value string `json:"value"`
-		} `json:"setGlobalVar"`
+	setVar, err := gqlClient.SetGlobalVar(context.Background(), "gqlkey", "gqlval")
+	if err != nil {
+		t.Fatalf("SetGlobalVar: %v", err)
 	}
-	data := doGQL[setResp](t, `mutation {
-		setGlobalVar(key: "gqlkey", value: "gqlval") { key value }
-	}`, nil)
-	if data.SetGlobalVar.Key != "gqlkey" || data.SetGlobalVar.Value != "gqlval" {
-		t.Fatalf("unexpected setGlobalVar result: %+v", data.SetGlobalVar)
+	if setVar == nil || setVar.Key != "gqlkey" || setVar.Value != "gqlval" {
+		t.Fatalf("unexpected setGlobalVar result: %+v", setVar)
 	}
 
-	type listResp struct {
-		GlobalVars []struct {
-			Key   string `json:"key"`
-			Value string `json:"value"`
-		} `json:"globalVars"`
+	listData, err := gqlClient.GlobalVars(context.Background())
+	if err != nil {
+		t.Fatalf("GlobalVars: %v", err)
 	}
-	listData := doGQL[listResp](t, `query { globalVars { key value } }`, nil)
 	found := false
-	for _, v := range listData.GlobalVars {
+	for _, v := range listData {
 		if v.Key == "gqlkey" && v.Value == "gqlval" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("gqlkey not found in globalVars: %+v", listData.GlobalVars)
+		t.Fatalf("gqlkey not found in globalVars: %+v", listData)
 	}
 
-	type delResp struct {
-		DeleteGlobalVar bool `json:"deleteGlobalVar"`
+	delOK, err := gqlClient.DeleteGlobalVar(context.Background(), "gqlkey")
+	if err != nil {
+		t.Fatalf("DeleteGlobalVar: %v", err)
 	}
-	delData := doGQL[delResp](t, `mutation { deleteGlobalVar(key: "gqlkey") }`, nil)
-	if !delData.DeleteGlobalVar {
+	if !delOK {
 		t.Fatal("deleteGlobalVar returned false")
 	}
 }
 
+// TestScriptCannotAccessOtherTokenVars tests global vars sharing (vars are shared across tokens).
+// Scenario: Create 2 tokens with scripts. Token 1 stores var, token 2 retrieves it.
+// Expects: Token 2 can read var written by token 1 (confirmed shared storage).
 func TestScriptCannotAccessOtherTokenVars(t *testing.T) {
 	// Global vars are shared — this test confirms vars written by one token
 	// are readable by another (they ARE shared by design)
@@ -420,6 +369,9 @@ func TestScriptCannotAccessOtherTokenVars(t *testing.T) {
 	}
 }
 
+// TestScriptRetrySimulation tests Script + global vars (retry simulation use case).
+// Scenario: Create token with script tracking attempts, respond 500 for attempts 1-2, 200 for attempt 3.
+// Expects: First 2 requests return 500, 3rd request returns 200 with {"ok":true}.
 func TestScriptRetrySimulation(t *testing.T) {
 	// Simulates a flaky endpoint: fail first 2 requests, succeed on 3rd
 	script := `

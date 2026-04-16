@@ -82,10 +82,6 @@ func New(baseURL string, opts ...Option) *http.Server {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// REST API
-	api := &restAPI{store: s, baseURL: baseURL}
-	api.register(r.Group("/api"))
-
 	webhook.NewHandler(s).Register(r)
 	registerUI(r)
 
