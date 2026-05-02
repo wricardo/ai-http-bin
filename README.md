@@ -54,22 +54,43 @@ Go 1.25+ is only needed if you want to build or run the project from source.
 
 ## Quick Start
 
-### 0. Download and start the server
+### 0. Install and start the server
 
-Download the latest release archive for your OS and CPU from:
-
-<https://github.com/wricardo/ai-http-bin/releases>
-
-Extract it, then start the binary on a fixed local port so the examples work as written:
+macOS/Linux:
 
 ```bash
-PORT=8082 ./ai-http-bin
-# => AI HTTP Bin running on :8082
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64|amd64) ARCH=amd64 ;;
+  arm64|aarch64) ARCH=arm64 ;;
+  *) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+curl -fsSL "https://github.com/wricardo/ai-http-bin/releases/latest/download/ai-http-bin_${OS}_${ARCH}.tar.gz" \
+  | tar -xz -C "$TMP"
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "$TMP/ai-http-bin" "$HOME/.local/bin/ai-http-bin"
+
+PORT=8082 "$HOME/.local/bin/ai-http-bin"
 ```
 
-On Windows, run `ai-http-bin.exe` and set `PORT=8082` in your shell before starting it.
+Windows PowerShell:
 
-You can also omit `PORT` to bind to a random available local port.
+```powershell
+$Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'amd64' }
+$InstallDir = "$env:LOCALAPPDATA\Programs\ai-http-bin\bin"
+$Zip = "$env:TEMP\ai-http-bin.zip"
+New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+Invoke-WebRequest "https://github.com/wricardo/ai-http-bin/releases/latest/download/ai-http-bin_windows_$Arch.zip" -OutFile $Zip
+Expand-Archive -Force $Zip $InstallDir
+$env:PORT = "8082"
+& "$InstallDir\ai-http-bin.exe"
+```
+
+The server should print `AI HTTP Bin running on :8082`. You can omit `PORT` to bind to a random available local port.
 
 ### 1. Create a token
 
@@ -291,23 +312,42 @@ Every request hitting a token URL is stored with:
 
 ### Download a release binary, no Go required
 
-Download the archive for your OS and CPU from the GitHub Releases page:
-
-<https://github.com/wricardo/ai-http-bin/releases>
-
-Archives are published for:
-
-- Linux amd64 / arm64
-- macOS amd64 / arm64
-- Windows amd64 / arm64
-
-After extracting the archive:
+Copy-paste install for macOS/Linux:
 
 ```bash
-PORT=8082 ./ai-http-bin
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64|amd64) ARCH=amd64 ;;
+  arm64|aarch64) ARCH=arm64 ;;
+  *) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+curl -fsSL "https://github.com/wricardo/ai-http-bin/releases/latest/download/ai-http-bin_${OS}_${ARCH}.tar.gz" \
+  | tar -xz -C "$TMP"
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "$TMP/ai-http-bin" "$HOME/.local/bin/ai-http-bin"
+
+# Run it with:
+PORT=8082 "$HOME/.local/bin/ai-http-bin"
 ```
 
-On Windows, run `ai-http-bin.exe`.
+Copy-paste install for Windows PowerShell:
+
+```powershell
+$Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'amd64' }
+$InstallDir = "$env:LOCALAPPDATA\Programs\ai-http-bin\bin"
+$Zip = "$env:TEMP\ai-http-bin.zip"
+New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+Invoke-WebRequest "https://github.com/wricardo/ai-http-bin/releases/latest/download/ai-http-bin_windows_$Arch.zip" -OutFile $Zip
+Expand-Archive -Force $Zip $InstallDir
+$env:PORT = "8082"
+& "$InstallDir\ai-http-bin.exe"
+```
+
+Release archives are also available manually at <https://github.com/wricardo/ai-http-bin/releases> for Linux, macOS, and Windows on amd64/arm64.
 
 Maintainers publish these artifacts by pushing a version tag such as `v0.1.0`; GitHub Actions runs GoReleaser and attaches the archives plus `checksums.txt` to the release.
 
