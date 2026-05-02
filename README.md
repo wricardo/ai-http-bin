@@ -14,7 +14,7 @@ The core idea is simple: create a **token**, then send HTTP requests to `/:token
 
 It runs as a single Go binary with no external service dependencies. All data lives in memory, so restarting the server clears tokens, captured requests, scripts, and global variables.
 
-For deeper guides and reference material, see the project wiki: <https://github.com/wricardo/ai-http-bin/wiki>.
+For deeper guides and reference material, see the project wiki: <https://github.com/wricardo/ai-http-bin/wiki>. 
 
 ---
 
