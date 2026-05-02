@@ -1,6 +1,8 @@
 # AI HTTP Bin
 
-A webhook inspection and mock HTTP endpoint service built for AI agents.
+A webhook inspection and mock HTTP endpoint service built for AI agents and developers.
+
+Use it when you need a temporary webhook receiver, a request inspector, or a mock API endpoint for local development, integration testing, demos, or AI-agent workflows.
 
 ---
 
@@ -8,7 +10,11 @@ A webhook inspection and mock HTTP endpoint service built for AI agents.
 
 AI HTTP Bin gives you throwaway HTTP endpoints you can point webhooks at, send test requests to, and inspect everything that arrives. It also lets you mock HTTP responses, including dynamic behavior driven by JavaScript.
 
-It runs as a single Go binary with no external dependencies. All data lives in memory.
+The core idea is simple: create a **token**, then send HTTP requests to `/:token`. Every request is captured for inspection, and the token controls what response the caller receives.
+
+It runs as a single Go binary with no external service dependencies. All data lives in memory, so restarting the server clears tokens, captured requests, scripts, and global variables.
+
+For deeper guides and reference material, see the project wiki: <https://github.com/wricardo/ai-http-bin/wiki>.
 
 ---
 
@@ -34,41 +40,66 @@ Existing tools are usually dashboard-first. AI HTTP Bin is API-first.
 
 ---
 
+## Requirements
+
+For normal use, you do **not** need Go.
+
+- A downloaded `ai-http-bin` release binary from <https://github.com/wricardo/ai-http-bin/releases>
+- `curl`
+- `jq` for the copy-paste examples below
+
+Go 1.25+ is only needed if you want to build or run the project from source.
+
+---
+
 ## Quick Start
 
+### 0. Download and start the server
+
+Download the latest release archive for your OS and CPU from:
+
+<https://github.com/wricardo/ai-http-bin/releases>
+
+Extract it, then start the binary on a fixed local port so the examples work as written:
+
 ```bash
-go run ./cmd/server
-# => AI HTTP Bin running on :<random-port>
+PORT=8082 ./ai-http-bin
+# => AI HTTP Bin running on :8082
 ```
 
-If you want a fixed port:
+On Windows, run `ai-http-bin.exe` and set `PORT=8082` in your shell before starting it.
+
+You can also omit `PORT` to bind to a random available local port.
+
+### 1. Create a token
+
+A token is your temporary webhook/mock endpoint. This command stores the token id in `$TOKEN`:
 
 ```bash
-PORT=8082 go run ./cmd/server
-```
-
-### Create a token
-
-```bash
-curl -s http://localhost:8082/graphql \
+TOKEN=$(curl -s http://localhost:8082/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query":"mutation { createToken { id url expiresAt defaultStatus defaultContentType requestCount } }"}' | jq
+  -d '{"query":"mutation { createToken { id url expiresAt defaultStatus defaultContentType requestCount } }"}' \
+  | jq -r '.data.createToken.id')
+
+echo "$TOKEN"
 ```
 
-### Send a webhook request
+### 2. Send a webhook request
 
 ```bash
-curl -X POST http://localhost:8082/<token-id> \
+curl -X POST "http://localhost:8082/$TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"event": "order.created", "id": 42}'
 ```
 
-### Inspect captured requests
+### 3. Inspect captured requests
+
+You do not need to know GraphQL deeply to get started; the examples are meant to be copy-pasteable.
 
 ```bash
 curl -s http://localhost:8082/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query":"query { requests(tokenId: \"<token-id>\", sorting: \"newest\") { total data { method path body headers createdAt } } }"}' | jq
+  -d "{\"query\":\"query { requests(tokenId: \\\"$TOKEN\\\", sorting: \\\"newest\\\") { total data { method path body headers createdAt } } }\"}" | jq
 ```
 
 Tokens expire 24 hours after creation. Each token stores at most 50 requests; once full, the oldest request is dropped on each new arrival (FIFO).
@@ -256,7 +287,31 @@ Every request hitting a token URL is stored with:
 
 ---
 
-## Run It
+## Install / Run It
+
+### Download a release binary, no Go required
+
+Download the archive for your OS and CPU from the GitHub Releases page:
+
+<https://github.com/wricardo/ai-http-bin/releases>
+
+Archives are published for:
+
+- Linux amd64 / arm64
+- macOS amd64 / arm64
+- Windows amd64 / arm64
+
+After extracting the archive:
+
+```bash
+PORT=8082 ./ai-http-bin
+```
+
+On Windows, run `ai-http-bin.exe`.
+
+Maintainers publish these artifacts by pushing a version tag such as `v0.1.0`; GitHub Actions runs GoReleaser and attaches the archives plus `checksums.txt` to the release.
+
+### Run from source
 
 ```bash
 # From source
