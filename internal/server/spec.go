@@ -19,7 +19,7 @@ Base URL: {{BASE_URL}}
 
 ## Key endpoints
 
-- API guide: {{BASE_URL}}/
+- LLM guide: {{BASE_URL}}/ or {{BASE_URL}}/llms.txt
 - GraphQL endpoint: POST {{BASE_URL}}/graphql
 - GraphQL playground: {{BASE_URL}}/playground
 - Health check: {{BASE_URL}}/health
@@ -29,7 +29,33 @@ Base URL: {{BASE_URL}}
 
 1. Create a token with mutation createToken
 2. Send any HTTP request to {{BASE_URL}}/<token-id>
-3. Inspect traffic with query requests(tokenId: ...)
+3. Inspect traffic with query requests(tokenId: ...) { data { ... } total }
+
+Example:
+
+~~~graphql
+mutation {
+  createToken(defaultStatus: 200, defaultContent: "ok") {
+    id
+    url
+  }
+}
+
+query Requests($tokenId: ID!) {
+  requests(tokenId: $tokenId, sorting: "newest") {
+    total
+    data {
+      id
+      method
+      path
+      query
+      body
+      headers
+      createdAt
+    }
+  }
+}
+~~~
 
 ## GraphQL operations
 

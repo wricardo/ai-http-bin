@@ -60,7 +60,7 @@ func New(baseURL string, opts ...Option) *http.Server {
 	gqlSrv.AddTransport(transport.Websocket{})
 
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(func(c *gin.Context) {
 		ctx := context.WithValue(c.Request.Context(), graph.GinContextKey{}, c)
 		c.Request = c.Request.WithContext(ctx)
