@@ -29,38 +29,6 @@ func (r *mutationResolver) CreateToken(ctx context.Context, defaultStatus *int, 
 	return storeTokenToModel(r.Store, r.BaseURL, t), nil
 }
 
-// SetScript is the resolver for the setScript field.
-func (r *mutationResolver) SetScript(ctx context.Context, id string, script string) (*model.Token, error) {
-	ok := r.Store.SetScript(id, script)
-	if !ok {
-		return nil, fmt.Errorf("token not found: %s", id)
-	}
-	t, _ := r.Store.GetToken(id)
-	return storeTokenToModel(r.Store, r.BaseURL, t), nil
-}
-
-// SetGlobalVar is the resolver for the setGlobalVar field.
-func (r *mutationResolver) SetGlobalVar(ctx context.Context, key string, value string) (*model.GlobalVar, error) {
-	r.Store.SetGlobalVar(key, value)
-	return &model.GlobalVar{Key: key, Value: value}, nil
-}
-
-// DeleteGlobalVar is the resolver for the deleteGlobalVar field.
-func (r *mutationResolver) DeleteGlobalVar(ctx context.Context, key string) (bool, error) {
-	r.Store.DeleteGlobalVar(key)
-	return true, nil
-}
-
-// GlobalVars is the resolver for the globalVars field.
-func (r *queryResolver) GlobalVars(ctx context.Context) ([]*model.GlobalVar, error) {
-	vars := r.Store.ListGlobalVars()
-	result := make([]*model.GlobalVar, 0, len(vars))
-	for k, v := range vars {
-		result = append(result, &model.GlobalVar{Key: k, Value: v})
-	}
-	return result, nil
-}
-
 // UpdateToken is the resolver for the updateToken field.
 func (r *mutationResolver) UpdateToken(ctx context.Context, id string, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) (*model.Token, error) {
 	t, ok := r.Store.GetToken(id)
@@ -69,6 +37,16 @@ func (r *mutationResolver) UpdateToken(ctx context.Context, id string, defaultSt
 	}
 	patchToken(t, defaultStatus, defaultContent, defaultContentType, timeout, cors)
 	r.Store.UpdateToken(t.ID, t.DefaultContent, t.DefaultContentType, t.DefaultStatus, t.Timeout, t.Cors)
+	return storeTokenToModel(r.Store, r.BaseURL, t), nil
+}
+
+// SetScript is the resolver for the setScript field.
+func (r *mutationResolver) SetScript(ctx context.Context, id string, script string) (*model.Token, error) {
+	ok := r.Store.SetScript(id, script)
+	if !ok {
+		return nil, fmt.Errorf("token not found: %s", id)
+	}
+	t, _ := r.Store.GetToken(id)
 	return storeTokenToModel(r.Store, r.BaseURL, t), nil
 }
 
@@ -99,6 +77,18 @@ func (r *mutationResolver) ClaimToken(ctx context.Context, id string) (*model.To
 	return storeTokenToModel(r.Store, r.BaseURL, t), nil
 }
 
+// SetGlobalVar is the resolver for the setGlobalVar field.
+func (r *mutationResolver) SetGlobalVar(ctx context.Context, key string, value string) (*model.GlobalVar, error) {
+	r.Store.SetGlobalVar(key, value)
+	return &model.GlobalVar{Key: key, Value: value}, nil
+}
+
+// DeleteGlobalVar is the resolver for the deleteGlobalVar field.
+func (r *mutationResolver) DeleteGlobalVar(ctx context.Context, key string) (bool, error) {
+	r.Store.DeleteGlobalVar(key)
+	return true, nil
+}
+
 // Token is the resolver for the token field.
 func (r *queryResolver) Token(ctx context.Context, id string) (*model.Token, error) {
 	t, ok := r.Store.GetToken(id)
@@ -120,6 +110,16 @@ func (r *queryResolver) Tokens(ctx context.Context) ([]*model.Token, error) {
 	result := make([]*model.Token, len(tokens))
 	for i, t := range tokens {
 		result[i] = storeTokenToModel(r.Store, r.BaseURL, t)
+	}
+	return result, nil
+}
+
+// GlobalVars is the resolver for the globalVars field.
+func (r *queryResolver) GlobalVars(ctx context.Context) ([]*model.GlobalVar, error) {
+	vars := r.Store.ListGlobalVars()
+	result := make([]*model.GlobalVar, 0, len(vars))
+	for k, v := range vars {
+		result = append(result, &model.GlobalVar{Key: k, Value: v})
 	}
 	return result, nil
 }

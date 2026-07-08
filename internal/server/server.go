@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-gonic/gin"
@@ -58,6 +59,7 @@ func New(baseURL string, opts ...Option) *http.Server {
 	}))
 	gqlSrv.AddTransport(transport.POST{})
 	gqlSrv.AddTransport(transport.Websocket{})
+	gqlSrv.Use(extension.Introspection{})
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())

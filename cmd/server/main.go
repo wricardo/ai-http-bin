@@ -49,7 +49,7 @@ func runLocal(ctx context.Context) {
 		log.Fatal(err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
+	baseURL := envOrDefault("BASE_URL", fmt.Sprintf("http://localhost:%d", port))
 
 	log.Printf("AI HTTP Bin running on :%d", port)
 	log.Printf("API spec:         %s/", baseURL)

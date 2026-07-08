@@ -107,6 +107,7 @@ type ComplexityRoot struct {
 		DefaultContent     func(childComplexity int) int
 		DefaultContentType func(childComplexity int) int
 		DefaultStatus      func(childComplexity int) int
+		ExpiresAt          func(childComplexity int) int
 		ID                 func(childComplexity int) int
 		IP                 func(childComplexity int) int
 		RequestCount       func(childComplexity int) int
@@ -518,6 +519,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Token.DefaultStatus(childComplexity), true
+	case "Token.expiresAt":
+		if e.ComplexityRoot.Token.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Token.ExpiresAt(childComplexity), true
 	case "Token.id":
 		if e.ComplexityRoot.Token.ID == nil {
 			break
@@ -1156,6 +1163,8 @@ func (ec *executionContext) fieldContext_Mutation_createToken(ctx context.Contex
 				return ec.fieldContext_Token_userAgent(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Token_createdAt(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_Token_expiresAt(ctx, field)
 			case "requestCount":
 				return ec.fieldContext_Token_requestCount(ctx, field)
 			case "defaultStatus":
@@ -1227,6 +1236,8 @@ func (ec *executionContext) fieldContext_Mutation_updateToken(ctx context.Contex
 				return ec.fieldContext_Token_userAgent(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Token_createdAt(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_Token_expiresAt(ctx, field)
 			case "requestCount":
 				return ec.fieldContext_Token_requestCount(ctx, field)
 			case "defaultStatus":
@@ -1298,6 +1309,8 @@ func (ec *executionContext) fieldContext_Mutation_setScript(ctx context.Context,
 				return ec.fieldContext_Token_userAgent(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Token_createdAt(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_Token_expiresAt(ctx, field)
 			case "requestCount":
 				return ec.fieldContext_Token_requestCount(ctx, field)
 			case "defaultStatus":
@@ -1451,6 +1464,8 @@ func (ec *executionContext) fieldContext_Mutation_claimToken(ctx context.Context
 				return ec.fieldContext_Token_userAgent(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Token_createdAt(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_Token_expiresAt(ctx, field)
 			case "requestCount":
 				return ec.fieldContext_Token_requestCount(ctx, field)
 			case "defaultStatus":
@@ -1736,6 +1751,8 @@ func (ec *executionContext) fieldContext_Query_token(ctx context.Context, field 
 				return ec.fieldContext_Token_userAgent(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Token_createdAt(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_Token_expiresAt(ctx, field)
 			case "requestCount":
 				return ec.fieldContext_Token_requestCount(ctx, field)
 			case "defaultStatus":
@@ -1806,6 +1823,8 @@ func (ec *executionContext) fieldContext_Query_tokens(_ context.Context, field g
 				return ec.fieldContext_Token_userAgent(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Token_createdAt(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_Token_expiresAt(ctx, field)
 			case "requestCount":
 				return ec.fieldContext_Token_requestCount(ctx, field)
 			case "defaultStatus":
@@ -2906,6 +2925,35 @@ func (ec *executionContext) _Token_createdAt(ctx context.Context, field graphql.
 }
 
 func (ec *executionContext) fieldContext_Token_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Token",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Token_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.Token) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Token_expiresAt,
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Token_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Token",
 		Field:      field,
@@ -5214,6 +5262,11 @@ func (ec *executionContext) _Token(ctx context.Context, sel ast.SelectionSet, ob
 			}
 		case "createdAt":
 			out.Values[i] = ec._Token_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "expiresAt":
+			out.Values[i] = ec._Token_expiresAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
