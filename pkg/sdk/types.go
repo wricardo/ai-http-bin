@@ -59,6 +59,7 @@ type CreateTokenInput struct {
 	Timeout            *int
 	Cors               *bool
 	Script             *string
+	NoExpiry           *bool
 }
 
 type UpdateTokenInput struct {
@@ -76,7 +77,7 @@ type RequestsOptions struct {
 }
 
 func (c *Client) CreateToken(ctx context.Context, in CreateTokenInput) (*Token, error) {
-	const query = `mutation($defaultStatus:Int,$defaultContent:String,$defaultContentType:String,$timeout:Int,$cors:Boolean,$script:String){createToken(defaultStatus:$defaultStatus,defaultContent:$defaultContent,defaultContentType:$defaultContentType,timeout:$timeout,cors:$cors,script:$script){id agentId url ip userAgent createdAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
+	const query = `mutation($defaultStatus:Int,$defaultContent:String,$defaultContentType:String,$timeout:Int,$cors:Boolean,$script:String,$noExpiry:Boolean){createToken(defaultStatus:$defaultStatus,defaultContent:$defaultContent,defaultContentType:$defaultContentType,timeout:$timeout,cors:$cors,script:$script,noExpiry:$noExpiry){id agentId url ip userAgent createdAt expiresAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
 	vars := map[string]any{
 		"defaultStatus":      in.DefaultStatus,
 		"defaultContent":     in.DefaultContent,
@@ -84,6 +85,7 @@ func (c *Client) CreateToken(ctx context.Context, in CreateTokenInput) (*Token, 
 		"timeout":            in.Timeout,
 		"cors":               in.Cors,
 		"script":             in.Script,
+		"noExpiry":           in.NoExpiry,
 	}
 	var out struct {
 		CreateToken Token `json:"createToken"`
@@ -95,7 +97,7 @@ func (c *Client) CreateToken(ctx context.Context, in CreateTokenInput) (*Token, 
 }
 
 func (c *Client) UpdateToken(ctx context.Context, id string, in UpdateTokenInput) (*Token, error) {
-	const query = `mutation($id:ID!,$defaultStatus:Int,$defaultContent:String,$defaultContentType:String,$timeout:Int,$cors:Boolean){updateToken(id:$id,defaultStatus:$defaultStatus,defaultContent:$defaultContent,defaultContentType:$defaultContentType,timeout:$timeout,cors:$cors){id agentId url ip userAgent createdAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
+	const query = `mutation($id:ID!,$defaultStatus:Int,$defaultContent:String,$defaultContentType:String,$timeout:Int,$cors:Boolean){updateToken(id:$id,defaultStatus:$defaultStatus,defaultContent:$defaultContent,defaultContentType:$defaultContentType,timeout:$timeout,cors:$cors){id agentId url ip userAgent createdAt expiresAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
 	vars := map[string]any{
 		"id":                 id,
 		"defaultStatus":      in.DefaultStatus,
@@ -114,7 +116,7 @@ func (c *Client) UpdateToken(ctx context.Context, id string, in UpdateTokenInput
 }
 
 func (c *Client) SetScript(ctx context.Context, id, script string) (*Token, error) {
-	const query = `mutation($id:ID!,$script:String!){setScript(id:$id,script:$script){id agentId url ip userAgent createdAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
+	const query = `mutation($id:ID!,$script:String!){setScript(id:$id,script:$script){id agentId url ip userAgent createdAt expiresAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
 	var out struct {
 		SetScript Token `json:"setScript"`
 	}
@@ -147,7 +149,7 @@ func (c *Client) DeleteToken(ctx context.Context, id string) (bool, error) {
 }
 
 func (c *Client) ClaimToken(ctx context.Context, id string) (*Token, error) {
-	const query = `mutation($id:ID!){claimToken(id:$id){id agentId url ip userAgent createdAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
+	const query = `mutation($id:ID!){claimToken(id:$id){id agentId url ip userAgent createdAt expiresAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
 	var out struct {
 		ClaimToken *Token `json:"claimToken"`
 	}
@@ -158,7 +160,7 @@ func (c *Client) ClaimToken(ctx context.Context, id string) (*Token, error) {
 }
 
 func (c *Client) Token(ctx context.Context, id string) (*Token, error) {
-	const query = `query($id:ID!){token(id:$id){id agentId url ip userAgent createdAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
+	const query = `query($id:ID!){token(id:$id){id agentId url ip userAgent createdAt expiresAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
 	var out struct {
 		Token *Token `json:"token"`
 	}
@@ -169,7 +171,7 @@ func (c *Client) Token(ctx context.Context, id string) (*Token, error) {
 }
 
 func (c *Client) Tokens(ctx context.Context) ([]Token, error) {
-	const query = `query{tokens{id agentId url ip userAgent createdAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
+	const query = `query{tokens{id agentId url ip userAgent createdAt expiresAt requestCount defaultStatus defaultContent defaultContentType timeout cors script}}`
 	var out struct {
 		Tokens []Token `json:"tokens"`
 	}

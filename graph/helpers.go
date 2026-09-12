@@ -71,21 +71,25 @@ func storeRequestToModel(r *store.Request) *model.Request {
 	}
 }
 
-// patchToken applies non-nil optional args onto an existing token.
-func patchToken(t *store.Token, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) {
+// resolveTokenPatch computes the effective field values for t with any
+// non-nil args overlaid, without mutating t. t's fields must only ever be
+// written through Store methods (which hold the lock), never directly.
+func resolveTokenPatch(t *store.Token, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) (content, contentType string, status, to int, c bool) {
+	content, contentType, status, to, c = t.DefaultContent, t.DefaultContentType, t.DefaultStatus, t.Timeout, t.Cors
 	if defaultStatus != nil {
-		t.DefaultStatus = *defaultStatus
+		status = *defaultStatus
 	}
 	if defaultContent != nil {
-		t.DefaultContent = *defaultContent
+		content = *defaultContent
 	}
 	if defaultContentType != nil {
-		t.DefaultContentType = *defaultContentType
+		contentType = *defaultContentType
 	}
 	if timeout != nil {
-		t.Timeout = *timeout
+		to = *timeout
 	}
 	if cors != nil {
-		t.Cors = *cors
+		c = *cors
 	}
+	return
 }

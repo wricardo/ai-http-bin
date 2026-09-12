@@ -58,6 +58,9 @@ func TestCreateToken(t *testing.T) {
 	if token.CreatedAt == "" {
 		t.Error("expected non-empty createdAt")
 	}
+	if token.ExpiresAt == "" {
+		t.Error("expected non-empty expiresAt for default token")
+	}
 	if token.RequestCount != 0 {
 		t.Errorf("requestCount: got %d, want 0", token.RequestCount)
 	}
@@ -103,6 +106,19 @@ func TestCreateTokenWithCustomResponse(t *testing.T) {
 	}
 	if !token.Cors {
 		t.Error("cors should be true")
+	}
+}
+
+func TestCreateTokenWithoutExpiry(t *testing.T) {
+	token, err := gqlClient.CreateToken(context.Background(), sdk.CreateTokenInput{NoExpiry: ptr(true)})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
+	}
+	if token == nil {
+		t.Fatal("CreateToken returned nil")
+	}
+	if token.ExpiresAt != "" {
+		t.Fatalf("expected empty expiresAt for no-expiry token, got %q", token.ExpiresAt)
 	}
 }
 

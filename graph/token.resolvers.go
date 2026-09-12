@@ -14,17 +14,25 @@ import (
 )
 
 // CreateToken is the resolver for the createToken field.
-func (r *mutationResolver) CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string) (*model.Token, error) {
+func (r *mutationResolver) CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string, noExpiry *bool) (*model.Token, error) {
 	ip, ua := "", ""
 	if gc := GinContextFrom(ctx); gc != nil {
 		ip = gc.ClientIP()
 		ua = gc.Request.UserAgent()
 	}
 	agentID := AgentIDFromContext(ctx)
-	t := r.Store.CreateToken(ip, ua, agentID)
-	patchToken(t, defaultStatus, defaultContent, defaultContentType, timeout, cors)
+	t := r.Store.CreateToken(ip, ua, agentID, noExpiry != nil && *noExpiry)
+	if defaultStatus != nil || defaultContent != nil || defaultContentType != nil || timeout != nil || cors != nil {
+		content, contentType, status, to, c := resolveTokenPatch(t, defaultStatus, defaultContent, defaultContentType, timeout, cors)
+		if updated, ok := r.Store.UpdateToken(t.ID, content, contentType, status, to, c); ok {
+			t = updated
+		}
+	}
 	if script != nil {
-		t.Script = *script
+		r.Store.SetScript(t.ID, *script)
+		if updated, ok := r.Store.GetToken(t.ID); ok {
+			t = updated
+		}
 	}
 	return storeTokenToModel(r.Store, r.BaseURL, t), nil
 }
@@ -35,9 +43,12 @@ func (r *mutationResolver) UpdateToken(ctx context.Context, id string, defaultSt
 	if !ok {
 		return nil, nil
 	}
-	patchToken(t, defaultStatus, defaultContent, defaultContentType, timeout, cors)
-	r.Store.UpdateToken(t.ID, t.DefaultContent, t.DefaultContentType, t.DefaultStatus, t.Timeout, t.Cors)
-	return storeTokenToModel(r.Store, r.BaseURL, t), nil
+	content, contentType, status, to, c := resolveTokenPatch(t, defaultStatus, defaultContent, defaultContentType, timeout, cors)
+	updated, ok := r.Store.UpdateToken(t.ID, content, contentType, status, to, c)
+	if !ok {
+		return nil, nil
+	}
+	return storeTokenToModel(r.Store, r.BaseURL, updated), nil
 }
 
 // SetScript is the resolver for the setScript field.

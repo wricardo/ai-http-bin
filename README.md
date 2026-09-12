@@ -12,7 +12,7 @@ AI HTTP Bin gives you throwaway HTTP endpoints you can point webhooks at, send t
 
 The core idea is simple: create a **token**, then send HTTP requests to `/:token`. Every request is captured for inspection, and the token controls what response the caller receives.
 
-It runs as a single Go binary with no external service dependencies. All data lives in memory, so restarting the server clears tokens, captured requests, scripts, and global variables.
+It runs as a single Go binary with no external service dependencies. By default all data lives in memory, but you can persist tokens, captured requests, and global variables to disk with `TOKEN_PERSISTENCE_PATH`.
 
 For deeper guides and reference material, see the project wiki: <https://github.com/wricardo/ai-http-bin/wiki>. 
 
@@ -105,6 +105,14 @@ TOKEN=$(curl -s http://localhost:8082/graphql \
 echo "$TOKEN"
 ```
 
+Create a non-expiring token:
+
+```bash
+curl -s http://localhost:8082/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query":"mutation { createToken(noExpiry: true) { id url expiresAt } }"}' | jq
+```
+
 ### 2. Send a webhook request
 
 ```bash
@@ -123,7 +131,7 @@ curl -s http://localhost:8082/graphql \
   -d "{\"query\":\"query { requests(tokenId: \\\"$TOKEN\\\", sorting: \\\"newest\\\") { total data { method path body headers createdAt } } }\"}" | jq
 ```
 
-Tokens expire 24 hours after creation. Each token stores at most 50 requests; once full, the oldest request is dropped on each new arrival (FIFO).
+Tokens expire 24 hours after creation by default. To create a non-expiring token, pass `noExpiry: true` in `createToken`. Each token stores at most 50 requests; once full, the oldest request is dropped on each new arrival (FIFO).
 
 ---
 
@@ -361,7 +369,12 @@ go run ./cmd/server
 go build -o ai-http-bin ./cmd/server && ./ai-http-bin
 ```
 
-By default it binds to a random available local port (or `:$PORT` when `PORT` is set). All data is in-memory, so restart clears state.
+By default it binds to a random available local port (or `:$PORT` when `PORT` is set).
+
+Useful env vars:
+
+- `TOKEN_TTL` (default `24h`, use `0` to disable default token expiry)
+- `TOKEN_PERSISTENCE_PATH` (optional JSON file path for persistence of tokens, captured requests, and global variables)
 
 ---
 

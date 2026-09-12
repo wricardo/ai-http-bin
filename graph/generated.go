@@ -46,7 +46,7 @@ type ComplexityRoot struct {
 	Mutation struct {
 		ClaimToken      func(childComplexity int, id string) int
 		ClearRequests   func(childComplexity int, tokenID string) int
-		CreateToken     func(childComplexity int, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string) int
+		CreateToken     func(childComplexity int, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string, noExpiry *bool) int
 		DeleteGlobalVar func(childComplexity int, key string) int
 		DeleteRequest   func(childComplexity int, id string) int
 		DeleteToken     func(childComplexity int, id string) int
@@ -122,7 +122,7 @@ type ComplexityRoot struct {
 type MutationResolver interface {
 	DeleteRequest(ctx context.Context, id string) (bool, error)
 	ClearRequests(ctx context.Context, tokenID string) (bool, error)
-	CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string) (*model.Token, error)
+	CreateToken(ctx context.Context, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool, script *string, noExpiry *bool) (*model.Token, error)
 	UpdateToken(ctx context.Context, id string, defaultStatus *int, defaultContent *string, defaultContentType *string, timeout *int, cors *bool) (*model.Token, error)
 	SetScript(ctx context.Context, id string, script string) (*model.Token, error)
 	ToggleCors(ctx context.Context, id string) (bool, error)
@@ -204,7 +204,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateToken(childComplexity, args["defaultStatus"].(*int), args["defaultContent"].(*string), args["defaultContentType"].(*string), args["timeout"].(*int), args["cors"].(*bool), args["script"].(*string)), true
+		return e.ComplexityRoot.Mutation.CreateToken(childComplexity, args["defaultStatus"].(*int), args["defaultContent"].(*string), args["defaultContentType"].(*string), args["timeout"].(*int), args["cors"].(*bool), args["script"].(*string), args["noExpiry"].(*bool)), true
 	case "Mutation.deleteGlobalVar":
 		if e.ComplexityRoot.Mutation.DeleteGlobalVar == nil {
 			break
@@ -749,6 +749,11 @@ func (ec *executionContext) field_Mutation_createToken_args(ctx context.Context,
 		return nil, err
 	}
 	args["script"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "noExpiry", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["noExpiry"] = arg6
 	return args, nil
 }
 
@@ -1134,7 +1139,7 @@ func (ec *executionContext) _Mutation_createToken(ctx context.Context, field gra
 		ec.fieldContext_Mutation_createToken,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateToken(ctx, fc.Args["defaultStatus"].(*int), fc.Args["defaultContent"].(*string), fc.Args["defaultContentType"].(*string), fc.Args["timeout"].(*int), fc.Args["cors"].(*bool), fc.Args["script"].(*string))
+			return ec.Resolvers.Mutation().CreateToken(ctx, fc.Args["defaultStatus"].(*int), fc.Args["defaultContent"].(*string), fc.Args["defaultContentType"].(*string), fc.Args["timeout"].(*int), fc.Args["cors"].(*bool), fc.Args["script"].(*string), fc.Args["noExpiry"].(*bool))
 		},
 		nil,
 		ec.marshalNToken2ᚖgithubᚗcomᚋwricardoᚋaiᚑhttpᚑbinᚋgraphᚋmodelᚐToken,

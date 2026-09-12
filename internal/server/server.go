@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -28,6 +29,16 @@ func WithMaxRequestsPerToken(n int) Option {
 // Pass 0 to disable expiry entirely (useful for self-hosted deployments).
 func WithTokenTTL(d time.Duration) Option {
 	return func(s *store.Store) { s.TokenTTL = d }
+}
+
+// WithTokenPersistence enables JSON-file persistence for token metadata.
+// If the file exists, tokens are loaded at startup.
+func WithTokenPersistence(path string) Option {
+	return func(s *store.Store) {
+		if err := s.EnableTokenPersistence(path); err != nil {
+			log.Printf("token persistence disabled (%s): %v", path, err)
+		}
+	}
 }
 
 // New builds an http.Server wired to the given baseURL.

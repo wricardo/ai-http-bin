@@ -1,0 +1,22 @@
+[tools]
+go = "1.25"
+
+[tasks.build]
+description = "Build ai-http-bin binary (Linux ARM64)"
+run = "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ai-http-bin ./cmd/server"
+
+[tasks.deploy]
+description = "Deploy to ai-http-bin.wricardo.net"
+run = """
+set -e
+echo "Building..."
+mise run build
+
+echo "Uploading to EC2..."
+scp ai-http-bin ubuntu@ai-http-bin.wricardo.net:/tmp/ai-http-bin
+
+echo "Restarting service..."
+ssh ubuntu@ai-http-bin.wricardo.net "sudo mv /tmp/ai-http-bin /opt/ai-http-bin/ai-http-bin && sudo systemctl restart ai-http-bin.service"
+
+echo "Deployment complete"
+"""

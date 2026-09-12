@@ -37,6 +37,25 @@ func main() {
 	}
 }
 
+func serverOptions() []server.Option {
+	opts := make([]server.Option, 0, 2)
+
+	tokenTTLRaw := envOrDefault("TOKEN_TTL", "24h")
+	tokenTTL, err := time.ParseDuration(tokenTTLRaw)
+	if err != nil {
+		log.Printf("invalid TOKEN_TTL=%q; using default 24h", tokenTTLRaw)
+		tokenTTL = 24 * time.Hour
+	}
+	opts = append(opts, server.WithTokenTTL(tokenTTL))
+
+	if p := envOrDefault("TOKEN_PERSISTENCE_PATH", ""); p != "" {
+		opts = append(opts, server.WithTokenPersistence(p))
+		log.Printf("token persistence enabled: %s", p)
+	}
+
+	return opts
+}
+
 func runLocal(ctx context.Context) {
 	listenAddr := envOrDefault("PORT", "0")
 	if listenAddr != "0" {
@@ -57,7 +76,7 @@ func runLocal(ctx context.Context) {
 	log.Printf("GraphQL:          %s/playground", baseURL)
 	log.Printf("Webhook receiver: %s/<token-id>", baseURL)
 
-	srv := server.New(baseURL)
+	srv := server.New(baseURL, serverOptions()...)
 	go func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Printf("serve error: %v", err)
@@ -90,7 +109,7 @@ func runNgrok(ctx context.Context) {
 	log.Printf("GraphQL:          %s/playground", baseURL)
 	log.Printf("Webhook receiver: %s/<token-id>", baseURL)
 
-	srv := server.New(baseURL)
+	srv := server.New(baseURL, serverOptions()...)
 	go func() {
 		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			log.Printf("serve error: %v", err)

@@ -35,9 +35,10 @@ Example:
 
 ~~~graphql
 mutation {
-  createToken(defaultStatus: 200, defaultContent: "ok") {
+  createToken(defaultStatus: 200, defaultContent: "ok", noExpiry: true) {
     id
     url
+    expiresAt
   }
 }
 
@@ -75,6 +76,7 @@ Optional header: X-Agent-Id
 ## Webhook behavior
 
 - Unknown/expired token returns HTTP 410
+- Tokens expire after 24h by default; createToken(noExpiry: true) disables expiry per token
 - Static response uses token defaults: status/content/contentType
 - Exact numeric subpath (for example /404) overrides status
 - If script exists, script response takes precedence
@@ -102,7 +104,7 @@ Core GraphQL operations:
 - Subscriptions: requestReceived(tokenId)
 
 Behavior notes:
-- Tokens expire after 24 hours by default
+- Tokens expire after 24 hours by default (or never when created with noExpiry: true)
 - Each token stores up to 50 requests (FIFO eviction)
 - Unknown or expired tokens return HTTP 410 on webhook endpoints
 - Script execution is capped at 2 seconds

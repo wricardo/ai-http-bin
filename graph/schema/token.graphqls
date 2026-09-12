@@ -5,7 +5,7 @@ extend type Query {
 }
 
 extend type Mutation {
-  createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean, script: String): Token!
+  createToken(defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean, script: String, noExpiry: Boolean): Token!
   updateToken(id: ID!, defaultStatus: Int, defaultContent: String, defaultContentType: String, timeout: Int, cors: Boolean): Token!
   setScript(id: ID!, script: String!): Token!
   toggleCors(id: ID!): Boolean!
